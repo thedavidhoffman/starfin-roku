@@ -42,7 +42,6 @@ end sub
 ' syncControls
 '-------------------------------------------------------------------------------
 sub syncControls()
-    syncFilterTransition()
     availability = transportAvailability()
     runtime = ""
     snapshot = m.native.snapshot
@@ -52,61 +51,7 @@ sub syncControls()
             if durationSeconds > 0 then runtime = "Runtime: " + DateTime.FormatPositionSeconds(durationSeconds)
         end if
     end if
-    publishFilters()
-    m.nodes.controls.presentation = { canFilter: canChooseFilter(), runtime: runtime, title: m.transport.title, year: m.transport.year, paused: m.playback.pauseRequested, canPause: availability.canPause }
-    if m.nodes.controls.visible and (m.playback.pauseRequested or m.playback.buffering or m.native.navigating) then m.nodes.controlsTimer.control = TimerControl.Command.Stop
-    if m.filters.notice <> "" then
-        message = m.filters.notice
-        m.filters.notice = ""
-        AppMessage.Show(message, "DVD video filter")
-    end if
-end sub
-
-'-------------------------------------------------------------------------------
-' showControls
-'-------------------------------------------------------------------------------
-sub showControls()
-    if m.filters.open or m.filters.busy then return
-    if m.loading.failed or m.native.state = DvdSession.State.Menu then return
-    if m.playback.video = invalid and m.native.state <> DvdSession.State.Still then return
-    m.nodes.controls.visible = true
-    syncControls()
-    m.nodes.controls.callFunc("focusControls")
-    restartControlsTimer()
-end sub
-
-'-------------------------------------------------------------------------------
-' hideControls
-'-------------------------------------------------------------------------------
-sub hideControls()
-    m.nodes.controlsTimer.control = TimerControl.Command.Stop
-    hadFocus = m.nodes.controls.isInFocusChain()
-    m.nodes.controls.visible = false
-    ' Focusing an ancestor alone can retain the hidden Play/Pause child.
-    m.nodes.controls.callFunc("releaseFocus")
-    if hadFocus then m.top.setFocus(true)
-end sub
-
-'-------------------------------------------------------------------------------
-' restartControlsTimer
-'-------------------------------------------------------------------------------
-sub restartControlsTimer()
-    if m.filters.open or m.filters.busy then
-        m.nodes.controlsTimer.control = TimerControl.Command.Stop
-        return
-    end if
-    m.nodes.controlsTimer.control = TimerControl.Command.Stop
-    if not m.nodes.controls.visible or m.playback.video = invalid then return
-    if m.playback.video.state <> VideoPlayerState.Value.Playing or m.playback.pauseRequested or m.native.navigating then return
-    m.nodes.controlsTimer.control = TimerControl.Command.Start
-end sub
-
-'-------------------------------------------------------------------------------
-' onControlsTimeout
-'-------------------------------------------------------------------------------
-sub onControlsTimeout()
-    if not m.loading.active or m.playback.video = invalid then return
-    if m.playback.video.state = VideoPlayerState.Value.Playing and not m.playback.pauseRequested then hideControls()
+    m.nodes.controls.presentation = { showFilter: filterEntryVisible(), canFilter: filterEntryVisible() and canChooseFilter(), runtime: runtime, title: m.transport.title, year: m.transport.year, paused: m.playback.pauseRequested, canPause: availability.canPause }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -151,7 +96,7 @@ sub requestDvdMenu()
     if not availability.canMenu then return
     m.native.navigating = true
     queueCommand(DvdSession.Action.Menu)
-    syncControls()
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -162,7 +107,7 @@ sub requestLastMenu()
     if not availability.canReturn then return
     m.native.navigating = true
     queueCommand(DvdSession.Action.ReturnToLastMenu)
-    syncControls()
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------

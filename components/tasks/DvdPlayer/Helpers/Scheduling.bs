@@ -1,0 +1,129 @@
+import "pkg:/source/DateTime.bs"
+import "pkg:/source/Number.bs"
+
+namespace DvdMenuContinuation
+    enum State
+        Pending = "pending"
+        WaitingForInput = "waitingForInput"
+        Scheduled = "scheduled"
+    end enum
+end namespace
+
+'-------------------------------------------------------------------------------
+' scheduleStatusPoll
+'-------------------------------------------------------------------------------
+sub scheduleStatusPoll()
+    intervalMs = 2000
+    snapshot = m.native.snapshot
+    if snapshot.state <> DvdSession.State.Menu then m.schedule.menuTimer = invalid
+    if m.native.pendingFilter <> invalid then
+        intervalMs = 2000
+    else if snapshot.state = DvdSession.State.Starting or snapshot.state = DvdSession.State.Preparing then
+        intervalMs = 1000
+    else if snapshot.state = DvdSession.State.Playing or snapshot.state = DvdSession.State.AwaitingCompletion then
+        ' Encoding completion is not viewer completion; Roku reports EOF separately.
+        intervalMs = 15000
+    else if snapshot.state = DvdSession.State.Menu then
+        scheduleMenuStatus(snapshot)
+        return
+    end if
+    m.schedule.statusAt = m.schedule.clock.TotalMilliseconds() + intervalMs
+end sub
+
+'-------------------------------------------------------------------------------
+' scheduleMenuStatus
+'-------------------------------------------------------------------------------
+sub scheduleMenuStatus(snapshot as object)
+    nowMs = m.schedule.clock.TotalMilliseconds()
+    m.schedule.statusAt = nowMs + 2000
+    continuation = snapshot.menuContinuation
+    if type(continuation) <> "roAssociativeArray" then
+        m.schedule.menuTimer = invalid
+        return
+    end if
+    if not DvdPaths.SameId(continuation.menuInstance, continuation.menuInstance) then
+        m.schedule.menuTimer = invalid
+        return
+    end if
+    if continuation.state = DvdMenuContinuation.State.WaitingForInput then
+        m.schedule.menuTimer = invalid
+        m.schedule.statusAt = invalid
+        return
+    end if
+    if continuation.state = DvdMenuContinuation.State.Pending then
+        m.schedule.menuTimer = invalid
+        m.schedule.statusAt = nowMs + 1000
+        return
+    end if
+    if continuation.state <> DvdMenuContinuation.State.Scheduled then
+        m.schedule.menuTimer = invalid
+        return
+    end if
+    timer = snapshot.automaticContinuation
+    if type(timer) <> "roAssociativeArray" then return
+    if not DvdPaths.SameId(timer.timerId, timer.timerId) then return
+    serverSeconds = DateTime.FromIsoSeconds(snapshot.serverTimeUtc)
+    expirySeconds = DateTime.FromIsoSeconds(timer.expiresUtc)
+    if serverSeconds <= 0 or expirySeconds <= 0 then return
+    deadlineMs = nowMs + (expirySeconds - serverSeconds) * 1000
+    previous = m.schedule.menuTimer
+    if previous <> invalid then
+        if DvdPaths.SameId(previous.menuInstance, continuation.menuInstance) and DvdPaths.SameId(previous.timerId, timer.timerId) and previous.expiresUtc = timer.expiresUtc then
+            ' Repeated snapshots cannot postpone an already scheduled deadline.
+            if previous.deadlineMs < deadlineMs then deadlineMs = previous.deadlineMs
+        end if
+    end if
+    m.schedule.menuTimer = { menuInstance: continuation.menuInstance, timerId: timer.timerId, expiresUtc: timer.expiresUtc, deadlineMs: deadlineMs }
+    if deadlineMs > nowMs then
+        m.schedule.statusAt = deadlineMs
+    else
+        ' The timer expired but navigation may not have published its next state yet.
+        m.schedule.statusAt = nowMs + 1000
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' stillDeadlineDelay
+'-------------------------------------------------------------------------------
+' Returns -1 without a finite still, otherwise milliseconds until its command is due.
+'-------------------------------------------------------------------------------
+function stillDeadlineDelay() as integer
+    snapshot = m.native.snapshot
+    if m.native.pendingFilter <> invalid or snapshot.state <> DvdSession.State.Still then return -1
+    if snapshot.still = invalid then return -1
+    expiry = DateTime.FromIsoSeconds(snapshot.still.expiresUtc)
+    if expiry <= 0 then return -1
+    now = CreateObject("roDateTime")
+    now.Mark()
+    delayMs = (expiry - now.AsSeconds()) * 1000
+    retryDelay = m.schedule.stillRetryAt - m.schedule.clock.TotalMilliseconds()
+    if delayMs < retryDelay then delayMs = retryDelay
+    if delayMs < 0 then delayMs = 0
+    return Number.ToInteger(delayMs, 0)
+end function
+
+'-------------------------------------------------------------------------------
+' nextSessionWait
+'-------------------------------------------------------------------------------
+function nextSessionWait() as integer
+    nowMs = m.schedule.clock.TotalMilliseconds()
+    delayMs = 30000 - m.native.heartbeat.TotalMilliseconds()
+    if m.schedule.statusAt <> invalid then
+        statusDelay = m.schedule.statusAt - nowMs
+        if statusDelay < delayMs then delayMs = statusDelay
+    end if
+    command = m.top.command
+    commandPending = command <> invalid
+    if commandPending then commandPending = command.requestId <> m.native.commandId
+    if commandPending then
+        commandDelay = 0
+        if command.requestId = m.schedule.retryId then commandDelay = m.schedule.retryAt - nowMs
+        if commandDelay < delayMs then delayMs = commandDelay
+    else
+        stillDelay = stillDeadlineDelay()
+        if stillDelay >= 0 and stillDelay < delayMs then delayMs = stillDelay
+    end if
+    ' wait(0) is indefinite. Due work must resume the loop instead.
+    if delayMs < 1 then delayMs = 1
+    return Number.ToInteger(delayMs, 1)
+end function

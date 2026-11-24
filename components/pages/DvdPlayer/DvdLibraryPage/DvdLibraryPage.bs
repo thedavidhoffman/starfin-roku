@@ -1,8 +1,7 @@
 import "pkg:/components/pages/DvdPlayer/Helpers/LibraryBrowse.bs"
-import "pkg:/source/store/SettingsStore.bs"
-import "pkg:/source/LibraryLayoutSetting.bs"
 import "pkg:/source/String.bs"
 import "pkg:/source/Number.bs"
+import "pkg:/source/ResolutionProfile.bs"
 import "pkg:/source/Remote.bs"
 import "pkg:/source/AppMessage.bs"
 import "pkg:/source/TaskControl.bs"
@@ -17,27 +16,40 @@ import "pkg:/components/pages/DvdPlayer/Helpers/LibraryModel.bs"
 '-------------------------------------------------------------------------------
 sub init()
     initReferences()
+    layoutBetaNotice()
+    m.nodes.betaBackground.uri = "pkg:/images/settings/" + ResolutionProfile.GetName() + "/settings-card-glass.9.png"
     m.library = { active: false, rendering: false, loading: false, entryPending: false, task: invalid, generation: 0, groups: [], key: "", index: 0, libraries: [], catalogKey: "", view: DvdMenu.BrowserView.Catalog }
     m.bookmarks = { task: invalid, generation: 0, pendingKey: "", stale: false, completion: invalid }
-    m.layout = { columns: 6, spec: invalid }
+    m.layout = { spec: invalid }
     m.browse = { selection: dvdBrowseSelection(LibraryBrowse.Option.Title), ready: false }
     applyLibraryLayout()
     initHandlers()
-    onDvdLayoutChanged()
 end sub
 
 '-------------------------------------------------------------------------------
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { grid: m.top.findNode("posters"), name: m.top.findNode("libraryName"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), browse: m.top.findNode("browseByButton"), sort: m.top.findNode("sortButton") }
+    m.nodes = { betaNotice: m.top.findNode("betaNotice"), betaBackground: m.top.findNode("betaBackground"), grid: m.top.findNode("posters"), name: m.top.findNode("libraryName"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), browse: m.top.findNode("browseByButton"), sort: m.top.findNode("sortButton") }
+end sub
+
+'-------------------------------------------------------------------------------
+' layoutBetaNotice
+'-------------------------------------------------------------------------------
+sub layoutBetaNotice()
+    title = m.top.findNode("betaTitle")
+    description = m.top.findNode("betaDescription")
+    textGroup = m.top.findNode("betaText")
+    titleHeight = title.boundingRect().height
+    descriptionHeight = description.boundingRect().height
+    description.translation = [0, titleHeight + 8]
+    textGroup.translation = [24, (160 - titleHeight - 8 - descriptionHeight) / 2]
 end sub
 
 '-------------------------------------------------------------------------------
 ' initHandlers
 '-------------------------------------------------------------------------------
 sub initHandlers()
-    m.top.observeField("settings", "onDvdLayoutChanged")
     m.nodes.browse.observeField("overlayRequested", "onDvdBrowseRequested")
     m.nodes.browse.observeField("focusExitDown", "focusBrowser")
     m.nodes.sort.observeField("focusExitDown", "focusBrowser")
@@ -99,7 +111,7 @@ sub loadLibrary()
     m.library.loading = true
     releaseLibraryTask()
     m.browse.ready = false
-    syncDvdBrowseControls()
+    applyLibraryLayout()
     m.library.generation++
     m.nodes.status.text = ""
     m.nodes.grid.visible = false
@@ -349,8 +361,19 @@ end sub
 ' applyLibraryLayout
 '-------------------------------------------------------------------------------
 sub applyLibraryLayout()
-    spec = VideoCardGridLayout.GetSpec("poster", "cards", m.layout.columns)
-    if m.library.view = DvdMenu.BrowserView.Catalog then spec = VideoCardGridLayout.GetSpec("thumbnail", "cards", 4)
+    showingTitles = m.library.view = DvdMenu.BrowserView.Library
+    m.nodes.betaNotice.visible = showingTitles
+    gridTop = 225
+    controlsTop = 132
+    statusTop = 300
+    if showingTitles then
+        gridTop = 450
+        controlsTop = 390
+        statusTop = 470
+    end if
+    m.nodes.status.translation = [117, statusTop]
+    spec = VideoCardGridLayout.GetSpec("poster", "cards", 5)
+    if not showingTitles then spec = VideoCardGridLayout.GetSpec("thumbnail", "cards", 4)
     m.layout.spec = spec
     m.nodes.grid.numColumns = spec.numColumns
     m.nodes.grid.numRows = spec.numRows
@@ -358,27 +381,12 @@ sub applyLibraryLayout()
     ' DVD cards reserve both title and caption lines; keep rows separated.
     m.nodes.grid.itemSpacing = [spec.itemSpacing[0], 24]
     m.nodes.grid.focusBitmapUri = spec.focusBitmapUri
-    gridTop = 225
-    ' Three-column posters use the shared top position to keep titles on screen.
-    if m.library.view = DvdMenu.BrowserView.Library and m.layout.columns = 3 then gridTop = spec.translation[1]
     m.nodes.grid.translation = [spec.translation[0], gridTop]
     artworkRight = VideoCardGridLayout.GetVisibleRightEdge(m.nodes.grid, spec)
     sortLeft = artworkRight - 48
-    m.nodes.browse.translation = [sortLeft - 8 - m.nodes.browse.buttonWidth, 132]
-    m.nodes.sort.translation = [sortLeft, 132]
+    m.nodes.browse.translation = [sortLeft - 8 - m.nodes.browse.buttonWidth, controlsTop]
+    m.nodes.sort.translation = [sortLeft, controlsTop]
     syncDvdBrowseControls()
-end sub
-
-'-------------------------------------------------------------------------------
-' onDvdLayoutChanged
-'-------------------------------------------------------------------------------
-sub onDvdLayoutChanged()
-    titleLayout = LibraryLayoutSetting.Parse(SettingsStore.GetSettingValue(m.top.settings, SettingsStore.Key.DvdTitlesLayout))
-    if titleLayout.columns = m.layout.columns then return
-    m.layout.columns = titleLayout.columns
-    if m.library.view = DvdMenu.BrowserView.Library and m.browse.ready then
-        renderGroups(m.library.groups, false)
-    end if
 end sub
 
 '-------------------------------------------------------------------------------

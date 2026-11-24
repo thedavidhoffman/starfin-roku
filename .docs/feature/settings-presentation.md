@@ -63,15 +63,11 @@ x=57.5 with a 24px vertical inset and eight rows at the existing 68px pitch.
 The DVD row, unavailable-cell dashes, and Poster-only navigation exceptions have
 been removed from this table. The dialog remains 968px tall with a 738px divider.
 
-The user-scoped DVD category contains Title columns (3/4/5/6 square buttons) and
-Menu highlights (Original DVD / Rectangle radio options). Poster presentation is
-fixed, so no Poster/Thumb/Detailed selector is displayed. The existing
-`dvd-titles-layout` value is retained without migration; default is Poster with six
-columns. Left/Right moves between column buttons, Down enters highlight options,
-and Up from the first highlight option returns to the last column button used.
-Left from the first column or highlight list returns to categories; Back follows
-the existing settings save/cancel flow. Both values live in the current settings
-editor until that flow commits them.
+The user-scoped DVD category contains only Menu highlights (Original DVD /
+Rectangle radio options). Left returns to categories; Up/Down stays within the
+highlight choices, and Back follows the existing save/cancel flow. DVD title grids
+use five poster columns without a user setting. Old `dvd-titles-layout` registry
+values are ignored rather than migrated.
 
 The account-scoped `dvd-menu-highlights` preference defaults to `original`;
 `rectangle` disables sheet loading. Invalid saved values use the default. MainScene
@@ -188,6 +184,6 @@ retained-state coverage.
 
 DVD settings source/diff review only. Deferred device checks: nine-category focus
 and wrap, column-button/radio navigation, save/cancel and account isolation,
-existing column preference preservation, 1080p/720p layout, both highlight modes,
+fixed five-column title layout, 1080p/720p layout, both highlight modes,
 rectangle mode without sheet requests, and original-artwork fallback. No tests
 changed or run, builds, automated validation, deployment or device checks.

@@ -39,6 +39,136 @@ namespace tests
             return { initialScreen: "home", disc: { ifoSha256: "fixture", menuAssets: [asset], titleSets: [titleSet, extraSet], titles: [{ number: 6, titleSet: 2, titleWithinSet: 5, pgcs: [1], chapters: chapters }, { number: 7, titleSet: 3, titleWithinSet: 1, pgcs: [1], chapters: chapters }], reviewedInterpretation: { episodes: [], specialFeatures: [] } }, menuMap: { screens: screens } }
         end function
 
+        @describe("measured DVD title progress")
+
+        function measuredSnapshot() as object
+            m.node.loading.active = true
+            m.node.loading.failed = false
+            m.node.resume.closing = false
+            m.node.session.demo = { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }
+            m.node.playback.id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            m.node.playback.failed = false
+            m.node.playback.video = CreateObject("roSGNode", "Video")
+            m.node.native.state = "playing"
+            return {
+                capabilities: { titleTimeline: true, titleTimelineVersion: 2 }
+                playback: {
+                    playbackId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", titleIdentity: { discId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", titleNumber: 3 }, durationSeconds: 200
+                    titleTimeline: { status: "available", mapping: { type: "piecewise", ranges: [
+                        { outputStartSeconds: 0, outputEndSeconds: 2, titleStartSeconds: 100, titleEndSeconds: 102 }
+                    ] } }
+                }
+            }
+        end function
+
+        @it("derives presentation from the current video and measured mapping")
+        function _()
+            m.node.native.snapshot = m.measuredSnapshot()
+
+            'bs:disable-next-line 1140
+            result = getTimelinePresentation()
+
+            m.assertEqual(result.available, true)
+            m.assertEqual(result.elapsed, 100)
+            m.assertEqual(result.duration, 200)
+        end function
+
+        @it("rejects a measured snapshot belonging to replaced playback")
+        function _()
+            snapshot = m.measuredSnapshot()
+            snapshot.playback.playbackId = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+            m.node.native.snapshot = snapshot
+
+            'bs:disable-next-line 1140
+            result = getTimelinePresentation()
+
+            m.assertEqual(result.available, false)
+            m.assertEqual(result.reason, "playback-id-mismatch")
+        end function
+
+        @it("retains linear timeline support for older servers")
+        function _()
+            snapshot = m.measuredSnapshot()
+            snapshot.playback.titleTimeline.mapping = { type: "linear", titleOffsetSeconds: 50 }
+            m.node.native.snapshot = snapshot
+
+            'bs:disable-next-line 1140
+            result = getTimelinePresentation()
+
+            m.assertEqual(result.available, true)
+            m.assertEqual(result.elapsed, 50)
+        end function
+
+        @it("maps continuous output across a source timestamp reset")
+        function _()
+            ranges = [
+                { outputStartSeconds: 0, outputEndSeconds: 2, titleStartSeconds: 100, titleEndSeconds: 102 }
+                { outputStartSeconds: 2, outputEndSeconds: 4, titleStartSeconds: 102, titleEndSeconds: 104 }
+            ]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 3, 200), 103)
+        end function
+
+        @it("preserves a one-tick output interval late in playback")
+        function _()
+            ranges = ParseJson("[{" + Chr(34) + "outputStartSeconds" + Chr(34) + ":600.0," + Chr(34) + "outputEndSeconds" + Chr(34) + ":600.000011111111," + Chr(34) + "titleStartSeconds" + Chr(34) + ":1000.0," + Chr(34) + "titleEndSeconds" + Chr(34) + ":1000.04}]", "d")
+
+            'bs:disable-next-line 1140
+            result = measuredTitlePosition(ranges, 600.0000055555555#, 2000.0#)
+
+            m.assertTrue(result > 1000.019# and result < 1000.021#)
+        end function
+
+        @it("keeps other coverage available when a range is only one tick wide")
+        function _()
+            ranges = [
+                { outputStartSeconds: 600.0#, outputEndSeconds: 600.000011111111#, titleStartSeconds: 1000.0#, titleEndSeconds: 1000.04# }
+                { outputStartSeconds: 601.0#, outputEndSeconds: 603.0#, titleStartSeconds: 1001.0#, titleEndSeconds: 1003.0# }
+            ]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 602.0#, 2000.0#), 1002.0#)
+        end function
+
+        @it("holds authored position for a duplicated output frame")
+        function _()
+            ranges = [{ outputStartSeconds: 2, outputEndSeconds: 3, titleStartSeconds: 102, titleEndSeconds: 102 }]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 2.5, 200), 102)
+        end function
+
+        @it("leaves unknown gaps unavailable")
+        function _()
+            ranges = [
+                { outputStartSeconds: 0, outputEndSeconds: 1, titleStartSeconds: 100, titleEndSeconds: 101 }
+                { outputStartSeconds: 2, outputEndSeconds: 3, titleStartSeconds: 102, titleEndSeconds: 103 }
+            ]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 1.5, 200), invalid)
+        end function
+
+        @it("does not extrapolate beyond published coverage")
+        function _()
+            ranges = [{ outputStartSeconds: 0, outputEndSeconds: 1, titleStartSeconds: 100, titleEndSeconds: 101 }]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 2, 200), invalid)
+        end function
+
+        @it("rejects overlapping ranges even when the position matches")
+        function _()
+            ranges = [
+                { outputStartSeconds: 0, outputEndSeconds: 2, titleStartSeconds: 100, titleEndSeconds: 102 }
+                { outputStartSeconds: 1, outputEndSeconds: 3, titleStartSeconds: 101, titleEndSeconds: 103 }
+            ]
+
+            'bs:disable-next-line 1140
+            m.assertEqual(measuredTitlePosition(ranges, 1.5, 200), invalid)
+        end function
+
         @describe("geometry and focus")
 
         @it("fits anamorphic source coordinates into the centered 4:3 display")

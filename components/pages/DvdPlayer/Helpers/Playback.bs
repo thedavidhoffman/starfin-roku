@@ -42,9 +42,9 @@ sub openContentVideo(playback as object)
     timer.repeat = false
     timer.observeField("fire", "onContentTimeout")
     timer.control = TimerControl.Command.Start
-    m.nodes.spinner.control = SpinnerControl.Command.Start
+    m.presentation.loading = true
     m.nodes.status.text = ""
-    if not m.filters.open then m.top.setFocus(true)
+    if not m.filters.open then restorePlayerFocus()
     video.control = MediaControl.Command.Play
 end sub
 
@@ -60,7 +60,7 @@ sub onContentState(event as object)
     if state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Paused then
         m.playback.buffering = false
         m.playback.timer.control = TimerControl.Command.Stop
-        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.presentation.loading = false
         m.nodes.host.visible = false
         m.nodes.contentHost.visible = true
         m.nodes.status.text = ""
@@ -72,14 +72,14 @@ sub onContentState(event as object)
         if state = VideoPlayerState.Value.Paused and m.playback.pauseRequested then showControls()
         restartControlsTimer()
     else if state = VideoPlayerState.Value.Buffering then
-        m.nodes.spinner.control = SpinnerControl.Command.Start
+        m.presentation.loading = true
         if not m.playback.buffering then m.playback.timer.control = TimerControl.Command.Start
         m.playback.buffering = true
     else if state = VideoPlayerState.Value.Finished then
         if m.playback.completed then return
         m.playback.completed = true
         m.playback.timer.control = TimerControl.Command.Stop
-        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.presentation.loading = false
         ' Keep this Video node/frame until the authored boundary chooses new media.
         queueCommand(DvdSession.Action.Complete, m.playback.id)
     else if state = VideoPlayerState.Value.Error then
@@ -88,7 +88,7 @@ sub onContentState(event as object)
         queueCommand(DvdSession.Action.PlaybackFailed, m.playback.id)
         m.nodes.status.text = "The DVD stream could not be played."
     end if
-    syncControls()
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -99,7 +99,9 @@ sub onContentPosition(event as object)
     if not event.getRoSGNode().isSameNode(m.playback.video) then return
     if m.native.state <> DvdSession.State.Playing and m.native.state <> DvdSession.State.AwaitingCompletion then return
     position = Number.ToFloat(event.getData(), -1)
-    if position < 0 or position < m.playback.progress + 15 then return
+    if position < 0 then return
+    syncTimeline()
+    if position < m.playback.progress + 15 then return
     if not m.playback.started or m.playback.video.state <> VideoPlayerState.Value.Playing then return
     if m.native.inFlight = invalid and m.native.queue.Count() = 0 then
         m.playback.progress = position
@@ -126,6 +128,7 @@ sub releaseContentVideo()
     m.playback.timer = invalid
     m.playback.active = false
     m.playback.id = ""
+    syncTimeline()
     if video <> invalid then
         video.unobserveField("state")
         video.unobserveField("position")

@@ -1,0 +1,99 @@
+'-------------------------------------------------------------------------------
+' reconcileMenuSelection
+'-------------------------------------------------------------------------------
+sub reconcileMenuSelection(snapshot as object, previousSnapshot as dynamic, restoreSelection as boolean)
+    menu = snapshot.menu
+    previousMenu = invalid
+    if previousSnapshot <> invalid then
+        if previousSnapshot.state = DvdSession.State.Menu then previousMenu = previousSnapshot.menu
+    end if
+    if previousMenu = invalid then
+        restoreSelection = true
+    else if previousMenu.selectedButton <> menu.selectedButton or FormatJson(previousMenu.buttons) <> FormatJson(menu.buttons) then
+        restoreSelection = true
+    end if
+    if previousMenu <> invalid then
+        continuation = snapshot.menuContinuation
+        previousContinuation = previousSnapshot.menuContinuation
+        if type(continuation) = "roAssociativeArray" and type(previousContinuation) = "roAssociativeArray" then
+            menuInstance = continuation.menuInstance
+            previousInstance = previousContinuation.menuInstance
+            if DvdPaths.SameId(menuInstance, menuInstance) and DvdPaths.SameId(previousInstance, previousInstance) then
+                ' Identical button layouts can belong to different authored menus.
+                if not DvdPaths.SameId(menuInstance, previousInstance) then restoreSelection = true
+            end if
+        end if
+    end if
+    key = m.menu.focused.ToStr()
+    if not m.rendering.buttons.DoesExist(key) then restoreSelection = true
+    if restoreSelection then
+        restoreBackendMenuSelection(menu)
+    else
+        ' Artwork/atlas updates do not change locally navigated selection.
+        renderMenuHighlight()
+        restorePlayerFocus()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' restoreBackendMenuSelection
+'-------------------------------------------------------------------------------
+sub restoreBackendMenuSelection(menu as object)
+    focus = Number.ToInteger(menu.selectedButton, 0)
+    if not m.rendering.buttons.DoesExist(focus.ToStr()) and m.rendering.geometry.Count() > 0 then focus = m.rendering.geometry[0].id
+    m.menu.focused = focus
+    if m.rendering.geometry.Count() > 0 then
+        focusButton(focus)
+    else
+        renderMenuHighlight()
+        restorePlayerFocus()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' focusButton
+'-------------------------------------------------------------------------------
+sub focusButton(buttonNumber as integer)
+    key = buttonNumber.ToStr()
+    if not m.rendering.buttons.DoesExist(key) then return
+    m.menu.focused = buttonNumber
+    m.highlights.state = DvdHighlight.State.Selected
+    renderMenuHighlight()
+    restorePlayerFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' activateMenuButton
+'-------------------------------------------------------------------------------
+sub activateMenuButton(buttonId as integer)
+    if m.native.task = invalid or m.native.state <> DvdSession.State.Menu then return
+    if m.native.navigating or m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return
+    if not m.rendering.buttons.DoesExist(buttonId.ToStr()) then return
+    m.native.navigating = true
+    m.highlights.state = DvdHighlight.State.Activated
+    renderMenuHighlight()
+    queueCommand(DvdSession.Action.Button, invalid, buttonId)
+end sub
+
+'-------------------------------------------------------------------------------
+' navigateMenu
+'-------------------------------------------------------------------------------
+sub navigateMenu(direction as string)
+    destination = 0
+    for each button in m.rendering.geometry
+        if button.id = m.menu.focused then
+            destination = Number.ToInteger(button[direction], 0)
+            exit for
+        end if
+    end for
+    if not m.rendering.buttons.DoesExist(destination.ToStr()) then return
+    for each button in m.rendering.geometry
+        if button.id = destination then
+            focusButton(destination)
+            ' Only a user directional selection triggers authored auto-action.
+            if button.autoAction = true then activateMenuButton(destination)
+            return
+        end if
+    end for
+end sub
+

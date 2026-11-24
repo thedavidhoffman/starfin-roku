@@ -1,0 +1,125 @@
+import "pkg:/source/Number.bs"
+import "pkg:/source/String.bs"
+
+namespace DvdTimeline
+    enum Status
+        Available = "available"
+    end enum
+    enum Mapping
+        Linear = "linear"
+        Piecewise = "piecewise"
+    end enum
+end namespace
+
+'-------------------------------------------------------------------------------
+' syncTimeline
+'-------------------------------------------------------------------------------
+sub syncTimeline()
+    presentation = getTimelinePresentation()
+    diagnosticKey = m.playback.id + ":" + presentation.reason
+    if m.timeline.diagnosticKey <> diagnosticKey then
+        m.timeline.diagnosticKey = diagnosticKey
+        m.log.write("Timeline available=" + presentation.available.ToStr() + " reason=" + presentation.reason + " playbackId=" + m.playback.id)
+    end if
+    m.nodes.controls.timeline = presentation
+end sub
+
+'-------------------------------------------------------------------------------
+' getTimelinePresentation
+'-------------------------------------------------------------------------------
+function getTimelinePresentation() as object
+    unavailable = { available: false, reason: "inactive" }
+    if not m.loading.active or m.loading.failed or m.resume.closing then return unavailable
+    unavailable.reason = "not-title-playback"
+    if m.native.state <> DvdSession.State.Playing and m.native.state <> DvdSession.State.AwaitingCompletion then return unavailable
+    snapshot = m.native.snapshot
+    unavailable.reason = "no-active-video"
+    if snapshot = invalid or m.playback.video = invalid or m.playback.failed then return unavailable
+    unavailable.reason = "missing-timeline-capability"
+    if type(snapshot.capabilities) <> "roAssociativeArray" then return unavailable
+    if snapshot.capabilities.titleTimeline <> true then return unavailable
+    unavailable.reason = "missing-playback-descriptor"
+    playback = snapshot.playback
+    if type(playback) <> "roAssociativeArray" then return unavailable
+    unavailable.reason = "playback-id-mismatch"
+    if not DvdPaths.SameId(playback.playbackId, m.playback.id) then return unavailable
+    unavailable.reason = "missing-title-identity"
+    identity = playback.titleIdentity
+    if type(identity) <> "roAssociativeArray" then return unavailable
+    unavailable.reason = "disc-id-mismatch"
+    if not DvdPaths.SameId(identity.discId, m.session.demo.id) then return unavailable
+    unavailable.reason = "invalid-title-number"
+    titleNumber = timelineNumber(identity.titleNumber)
+    if titleNumber = invalid then return unavailable
+    if titleNumber <= 0 then return unavailable
+    unavailable.reason = "missing-timeline-descriptor"
+    descriptor = playback.titleTimeline
+    if type(descriptor) <> "roAssociativeArray" then return unavailable
+    unavailable.reason = "backend-" + Strings.ToString(descriptor.status, "missing-status") + ":" + Strings.ToString(descriptor.reasonCode, "unspecified")
+    if descriptor.status <> DvdTimeline.Status.Available then return unavailable
+    unavailable.reason = "unsupported-mapping"
+    mapping = descriptor.mapping
+    if type(mapping) <> "roAssociativeArray" then return unavailable
+    duration = timelineNumber(playback.durationSeconds)
+    position = timelineNumber(m.playback.video.position)
+    unavailable.reason = "invalid-timing"
+    if duration = invalid or position = invalid then return unavailable
+    if duration <= 0 or position < 0 then return unavailable
+    if mapping.type = DvdTimeline.Mapping.Piecewise then
+        elapsed = measuredTitlePosition(mapping.ranges, position, duration)
+        unavailable.reason = "unmapped-position"
+        if elapsed = invalid then return unavailable
+        return { available: true, reason: "piecewise", elapsed: elapsed, duration: duration }
+    end if
+    unavailable.reason = "unsupported-mapping"
+    if mapping.type <> DvdTimeline.Mapping.Linear then return unavailable
+    offset = timelineNumber(mapping.titleOffsetSeconds)
+    unavailable.reason = "invalid-timing"
+    if offset = invalid then return unavailable
+    elapsed = offset + position
+    if elapsed < 0 then elapsed = 0
+    if elapsed > duration then elapsed = duration
+    return { available: true, reason: "linear", elapsed: elapsed, duration: duration }
+end function
+
+'-------------------------------------------------------------------------------
+' timelineNumber
+'-------------------------------------------------------------------------------
+function timelineNumber(value as dynamic) as dynamic
+    valueType = type(value)
+    if valueType <> "Integer" and valueType <> "roInt" and valueType <> "LongInteger" and valueType <> "roLongInteger" and valueType <> "Float" and valueType <> "roFloat" and valueType <> "Double" and valueType <> "roDouble" then return invalid
+    ' Timeline endpoints may differ by one 90 kHz tick. Keep the precision
+    ' requested by the DVD task's JSON parser throughout validation and interpolation.
+    result = Number.ToDouble(value, 0.0#)
+    ' Nonfinite numbers cannot form a meaningful display position or fraction.
+    if not (result - result = 0) then return invalid
+    return result
+end function
+
+'-------------------------------------------------------------------------------
+' measuredTitlePosition
+'-------------------------------------------------------------------------------
+function measuredTitlePosition(ranges as dynamic, position as double, duration as double) as dynamic
+    if type(ranges) <> "roArray" then return invalid
+    if ranges.Count() = 0 or ranges.Count() > 4096 then return invalid
+    previousEnd = -1
+    result = invalid
+    for each item in ranges
+        if type(item) <> "roAssociativeArray" then return invalid
+        outputStart = timelineNumber(item.outputStartSeconds)
+        outputEnd = timelineNumber(item.outputEndSeconds)
+        titleStart = timelineNumber(item.titleStartSeconds)
+        titleEnd = timelineNumber(item.titleEndSeconds)
+        if outputStart = invalid or outputEnd = invalid or titleStart = invalid or titleEnd = invalid then return invalid
+        if outputStart < 0 or outputStart < previousEnd or outputEnd <= outputStart then return invalid
+        if titleStart < 0 or titleEnd < titleStart or titleEnd > duration + 0.05 then return invalid
+        previousEnd = outputEnd
+        ' Shared endpoints use the later interval. Gaps never inherit a neighbor.
+        if position >= outputStart and position <= outputEnd then
+            fraction = (position - outputStart) / (outputEnd - outputStart)
+            result = titleStart + fraction * (titleEnd - titleStart)
+            if result > duration then result = duration
+        end if
+    end for
+    return result
+end function

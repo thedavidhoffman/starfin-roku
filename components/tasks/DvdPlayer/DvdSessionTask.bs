@@ -6,6 +6,7 @@ import "pkg:/source/Number.bs"
 import "pkg:/source/DateTime.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/FilterContracts.bs"
 import "pkg:/components/tasks/DvdPlayer/Helpers/Filters.bs"
+import "pkg:/components/tasks/DvdPlayer/Helpers/Scheduling.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/SessionContracts.bs"
 
@@ -22,6 +23,7 @@ end sub
 sub executeRequest()
     request = m.top.request
     m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", pendingFilter: invalid, authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
+    m.schedule = { clock: CreateObject("roTimespan"), statusAt: 0, retryId: "", retryAt: 0, stillRetryAt: 0, menuTimer: invalid }
     m.port = CreateObject("roMessagePort")
     m.top.observeField("cancelRequested", m.port)
     m.top.observeField("command", m.port)
@@ -70,33 +72,35 @@ function runSession() as string
             return Strings.ToString(snapshot.error, "Native DVD session failed.")
         end if
         if snapshot.state = DvdSession.State.Stopped then return ""
-        if m.native.heartbeat.TotalMilliseconds() >= 30000 then
+        command = m.top.command
+        commandPending = command <> invalid
+        if commandPending then commandPending = command.requestId <> m.native.commandId
+        commandReady = commandPending
+        if commandPending then
+            if command.requestId = m.schedule.retryId then commandReady = m.schedule.clock.TotalMilliseconds() >= m.schedule.retryAt
+        end if
+        ' A command wake-up must not first issue an unrelated status GET.
+        if commandReady then
+            result = sendCommand(command)
+            if not result.ok and result.status <> 409 and result.keepSession <> true then return Strings.ToString(result.errorMessage, "DVD command failed.")
+        else if not commandPending and stillDeadlineDelay() = 0 then
+            m.schedule.stillRetryAt = m.schedule.clock.TotalMilliseconds() + 1000
+            command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.StillComplete, revision: snapshot.revision }
+            result = sendCommand(command, false)
+            if not result.ok and result.status <> 409 then return Strings.ToString(result.errorMessage, "Unable to continue after DVD still.")
+        else if m.native.heartbeat.TotalMilliseconds() >= 30000 then
             m.native.heartbeat.Mark()
             result = requestWithRetry(snapshot.heartbeatPath, "POST", "")
             if not result.ok then return Strings.ToString(result.errorMessage, "Unable to keep the DVD session alive.")
-        end if
-        command = m.top.command
-        if command <> invalid and command.requestId <> m.native.commandId then
-            result = sendCommand(command)
-            if not result.ok and result.status <> 409 and result.keepSession <> true then return Strings.ToString(result.errorMessage, "DVD command failed.")
-        else if m.native.pendingFilter = invalid and snapshot.state = DvdSession.State.Still and snapshot.still.expiresUtc <> invalid then
-            expiry = DateTime.FromIsoSeconds(snapshot.still.expiresUtc)
-            now = CreateObject("roDateTime")
-            now.Mark()
-            if expiry > 0 and now.AsSeconds() >= expiry then
-                command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.StillComplete, revision: snapshot.revision }
-                result = sendCommand(command, false)
-                if not result.ok and result.status <> 409 then return Strings.ToString(result.errorMessage, "Unable to continue after DVD still.")
-            end if
+        else if m.schedule.statusAt <> invalid and m.schedule.clock.TotalMilliseconds() >= m.schedule.statusAt then
+            ' Bound retries even if a server returns an older snapshot.
+            m.schedule.statusAt = m.schedule.clock.TotalMilliseconds() + 2000
+            result = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
+            if not result.ok then return Strings.ToString(result.errorMessage, "Unable to read DVD session status.")
+            acceptSnapshot(result.data)
         end if
         if m.top.cancelRequested then exit while
-        pollDelay = 400
-        if m.native.pendingFilter <> invalid then pollDelay = 2000
-        wait(pollDelay, m.port)
-        if m.top.cancelRequested then exit while
-        result = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
-        if not result.ok then return Strings.ToString(result.errorMessage, "Unable to read DVD session status.")
-        acceptSnapshot(result.data)
+        if m.native.snapshot.state <> DvdSession.State.Stopped and m.native.snapshot.state <> DvdSession.State.Failed then wait(nextSessionWait(), m.port)
     end while
     return ""
 end function
@@ -124,10 +128,15 @@ function sendCommand(command as object, notifyPage = true as boolean) as object
         snapshot = m.native.snapshot
         ' EOF may beat encoder completion. Keep the identical command pending.
         if command.action = DvdSession.Action.Complete and snapshot.playback <> invalid then
-            if DvdPaths.SameId(snapshot.playback.playbackId, command.playbackId) then return result
+            if DvdPaths.SameId(snapshot.playback.playbackId, command.playbackId) then
+                m.schedule.retryId = command.requestId
+                m.schedule.retryAt = m.schedule.clock.TotalMilliseconds() + 1000
+                return result
+            end if
         end if
     end if
     if notifyPage then
+        m.schedule.retryId = ""
         m.native.commandId = command.requestId
         m.top.response = { action: DvdSession.Event.Command, requestId: m.native.request.requestId, commandId: command.requestId, ok: result.ok, conflict: result.status = 409, payload: m.native.snapshot }
     end if
@@ -148,6 +157,7 @@ sub acceptSnapshot(data as dynamic)
     m.native.snapshot = data
     if revision = m.native.revision then
         reconcilePendingFilter()
+        scheduleStatusPoll()
         return
     end if
     if data.state = DvdSession.State.Playing or data.state = DvdSession.State.AwaitingCompletion then
@@ -169,6 +179,7 @@ sub acceptSnapshot(data as dynamic)
     m.native.revision = revision
     if not m.top.cancelRequested then m.top.response = { action: DvdSession.Event.Snapshot, requestId: m.native.request.requestId, payload: data }
     reconcilePendingFilter()
+    scheduleStatusPoll()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -196,7 +207,7 @@ end function
 ' sessionRequest
 '-------------------------------------------------------------------------------
 function sessionRequest(path as string, method as string, body as dynamic) as object
-    result = HttpClient.Request(Url.Resolve(m.native.request.server, path), method, invalid, body, m.native.headers, false, 10000)
+    result = HttpClient.Request(Url.Resolve(m.native.request.server, path), method, invalid, body, m.native.headers, false, 10000, "d")
     if result.authExpired = true then m.native.authExpired = true
     return result
 end function

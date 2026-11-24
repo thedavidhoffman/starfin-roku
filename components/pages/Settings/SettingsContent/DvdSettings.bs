@@ -2,44 +2,17 @@
 ' initDvdSettingsReferences
 '-------------------------------------------------------------------------------
 sub initDvdSettingsReferences(panel as object)
-    m.dvdSettings = { buttons: [], lastColumnIndex: 0 }
     m.settingsControls.dvdHighlights = panel.findNode("dvdHighlightOptions")
-    group = panel.findNode("dvdColumnButtons")
-    for columnIndex = 0 to 3
-        columnCount = columnIndex + 3
-        button = group.createChild("SquareButton")
-        button.focusable = true
-        itemContent = CreateObject("roSGNode", "ContentNode")
-        itemContent.title = columnCount.ToStr()
-        button.itemContent = itemContent
-        button.translation = [columnIndex * 72, 0]
-        button.addFields({ columnValue: columnCount })
-        button.observeField("buttonSelected", "onDvdColumnsSelected")
-        m.dvdSettings.buttons.Push(button)
-    end for
-    m.categoryControls[SettingsNavigation.Category.DVD] = [m.dvdSettings.buttons[0], m.dvdSettings.buttons[1], m.dvdSettings.buttons[2], m.dvdSettings.buttons[3], m.settingsControls.dvdHighlights]
+    m.categoryControls[SettingsNavigation.Category.DVD] = [m.settingsControls.dvdHighlights]
 end sub
 
 '-------------------------------------------------------------------------------
 ' applyDvdSettingsValues
 '-------------------------------------------------------------------------------
 sub applyDvdSettingsValues()
-    layout = LibraryLayoutSetting.Parse(SettingsStore.GetSettingValue(m.settingsState.values, SettingsStore.Key.DvdTitlesLayout))
-    for each button in m.dvdSettings.buttons
-        button.isSelected = button.columnValue = layout.columns
-    end for
     highlightIndex = 0
     if SettingsStore.GetSettingValue(m.settingsState.values, SettingsStore.Key.DvdMenuHighlights) = SettingsStore.DvdHighlightMode.Rectangle then highlightIndex = 1
     m.settingsControls.dvdHighlights.checkedItem = highlightIndex
-end sub
-
-'-------------------------------------------------------------------------------
-' onDvdColumnsSelected
-'-------------------------------------------------------------------------------
-sub onDvdColumnsSelected(event as object)
-    button = event.getRoSGNode()
-    m.settingsState.values[SettingsStore.Key.DvdTitlesLayout] = LibraryLayoutSetting.Format(VideoCardPresentation.Type.Poster, button.columnValue)
-    applyDvdSettingsValues()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -58,31 +31,11 @@ end sub
 ' handleDvdSettingsKey
 '-------------------------------------------------------------------------------
 function handleDvdSettingsKey(key as string) as boolean
-    for columnIndex = 0 to m.dvdSettings.buttons.Count() - 1
-        if m.dvdSettings.buttons[columnIndex].isInFocusChain() then
-            m.dvdSettings.lastColumnIndex = columnIndex
-            if key = Remote.Key.Left then
-                if columnIndex = SettingsNavigation.DvdControl.FirstColumn then
-                    focusFirstField()
-                else
-                    focusCategoryControl(columnIndex - 1, invalid)
-                end if
-                return true
-            end if
-            if key = Remote.Key.Right then
-                if columnIndex < SettingsNavigation.DvdControl.LastColumn then focusCategoryControl(columnIndex + 1, invalid)
-                return true
-            end if
-            if key = Remote.Key.Down then return focusCategoryControl(SettingsNavigation.DvdControl.Highlights, 0)
-            if key = Remote.Key.Up then return true
-            return false
-        end if
-    end for
     if key = Remote.Key.Left then
         focusFirstField()
         return true
     end if
-    if key = Remote.Key.Up and isFocusedAtFirstItem(m.settingsControls.dvdHighlights) then return focusCategoryControl(m.dvdSettings.lastColumnIndex, invalid)
+    if key = Remote.Key.Up and isFocusedAtFirstItem(m.settingsControls.dvdHighlights) then return true
     if key = Remote.Key.Down and isFocusedAtLastItem(m.settingsControls.dvdHighlights) then return true
     return false
 end function

@@ -189,11 +189,10 @@ browse preferences through the existing LibraryViewStateStore with DVD-prefixed
 keys. Its feature-local LibraryBrowse helper coordinates shared Browse By/Sort
 controls and BrowseDialog via OverlayHost; MainScene passes the account key and
 routes close events only. DateTime owns calendar-date parsing for sorting. Full
-metadata endpoints are not fetched for cards or sorting. MainScene also passes account
-settings to the retained DVD browser. DvdLibraryPage owns the poster-column layout;
+metadata endpoints are not fetched for cards or sorting. DvdLibraryPage owns a fixed
+five-column poster layout and the title-only beta notice with centered text;
 DvdPosterCard consumes its shared grid spec for image size, masks, and request widths.
-SettingsStore owns the account-scoped Poster-only DVD title columns and menu
-highlight mode. SettingsContent owns the DVD category via its DvdSettings helper
+SettingsStore owns the account-scoped DVD menu highlight mode; title columns are not a setting. SettingsContent owns the DVD category via its DvdSettings helper
 and layout-only SettingsDvdPanel; the Libraries table excludes DVD titles.
 MainScene passes the normalized highlight choice explicitly when opening DvdPlayer;
 rectangle mode bypasses sheet loading. Folder cards remain four-column thumbnails.
@@ -218,8 +217,10 @@ Finite still completion remains task-owned. Menu updates preserve unchanged medi
 and local focus; successful command acknowledgments reconcile backend selection.
 DvdSessionTask owns start, status polling, command retries, heartbeats, timed still
 completion, final-position stop before DELETE, and cleanup after a cancelled/lost start request.
-DvdPlayer's Resume helper owns startup choice, resume-unavailable fallback and final
-position capture. Resume/DvdResumeDialog reuses the DVD catalog list content with
+DvdPlayer's Resume helper owns startup choice and resume-unavailable fallback.
+Lifecycle owns final-position capture, exit/restart/failure teardown, and detaching
+the session worker before releasing media. A shared resource-release path leaves
+the worker running to complete stop/DELETE and its cleanup-completion signal. Resume/DvdResumeDialog reuses the DVD catalog list content with
 two rows through OverlayHost. MainScene only routes these overlay events.
 DvdLibraryPage owns correlated bookmark refresh and pending selection by group key.
 The session task signals cleanup through a per-session completion node; MainScene
@@ -231,9 +232,22 @@ under DvdPlayer/Helpers; MainScene retains only shell routing/session handoff.
 The existing playback controllers are not involved. See
 [.docs/feature/dvd-menu-demo.md](.docs/feature/dvd-menu-demo.md).
 
+DvdPlayer's Presentation helper owns control show/hide, auto-hide timing, spinner
+presentation and player focus recovery. Session/media handlers update state and
+enter one presentation reconciliation path; TransportControls only derives control
+data and issues transport intent. Filter transition completion is reconciled before
+presentation; messages are emitted afterward. Timeline ticks remain independent.
+
 DVD menu rendering reconciles declared background sources independently of hotspot
-updates. The feature-local rendering helper owns background reuse, ready-still
-retention, preview fallback, and overlay replacement; DvdPlayer owns pending
+updates. MenuNavigation owns local selection, backend selection reconciliation,
+directional neighbors and auto-action dispatch; rendering never chooses focus.
+Artwork or highlight-sheet changes within the same menu instance preserve local
+selection. A changed valid menuContinuation.menuInstance, changed button data,
+backend-selected button or command acknowledgment reconciles backend selection.
+Missing instance identities retain the button/selection comparison.
+Unchanged buttons retain their nodes unless their display scale changes. The feature-local rendering helper owns background reuse, ready-still
+retention and overlay replacement; MenuPreview owns HLS/MP4 playback, fallback,
+loop covering, cooldowns and preview event cleanup. DvdPlayer owns pending
 navigation visibility and command locks. Unchanged sources keep playing through
 menu/preparation updates; content playback clears menu media before presentation.
 The renderer's feature-local HighlightSheet helper validates optional authored
@@ -245,15 +259,44 @@ remain authoritative. The backend owns stream/palette/menu-context selection;
 the client never chooses manifest variants. Immutable sheet path/dimensions own
 image identity independently of sprite mappings and menu background identity.
 
+DVD title timeline calculation belongs to DvdPlayer's feature-local Timeline helper.
+It combines the current playback descriptor's verified linear title offset with
+local Video position and publishes a separate timeline presentation to
+DvdPlaybackControls. Position updates never invoke control focus or filter refresh;
+session revisions and playback identity govern mapping lifetime. The controls
+render the standard-player timeline geometry without networking or seeking.
+Existing 15-second server progress reporting remains independent.
+DvdSessionTask's feature-local Scheduling helper owns status deadlines: 15 seconds
+for playback, one second for startup/menu evaluation, two seconds for unknown
+menus/stills or pending filters. Explicit waitingForInput menus disable status
+polling while retaining heartbeats; scheduled menus use a server-relative expiry
+anchored to a local monotonic deadline and keyed by menu instance/timer identity.
+Commands take priority over scheduled GETs, and accepted snapshots reconcile
+the deadline. Heartbeat, finite-still deadlines, and completion
+retry timing remain independent within the same task; there is no second poller.
+
 DVD playback filter selection is owned by DvdPlayer's feature-local Filters helper.
 DvdFilterModel carries presentation and selection/refresh intent between that owner
 and the centered DvdFilterDialog/DvdFilterContent through OverlayHost.
-DvdFilterContent owns vertical MarkupList focus; DvdFilterItem renders rounded rows and
-read-only contrast-aware checkbox indicators from item presentation data.
+DvdFilterContent owns three-column remote navigation, Clear focus, and filter-ID
+focus retention. Its MarkupLists render/scroll five rows per column without owning
+remote input; DvdFilterItem derives rounded-card focus and checkbox presentation
+from row data. DvdPlayer consumes the API categories/noFilter catalog and publishes
+capability-aware effect/Clear availability. No category inventory or flat-catalog
+compatibility lives in the renderer.
 Unchanged presentation is suppressed at the owner and row boundaries; filter
 intent may queue behind progress, with revision/position captured by dispatch. MainScene
 routes close events only. DvdFiltersTask owns authenticated catalog/capability
-requests; DvdPlayer owns their lifetime and visible-picker capability timer.
+requests; DvdPlayer owns their lifetime and session-scoped capability timer.
+Startup discovery gates both Playback Filters entry points, with active-effect
+Clear access retained when capability drops. Menu Play/Pause opens the same picker;
+content Play/Pause retains transport behavior. DvdPlayer's presentation helper owns
+the once-per-session five-second menu hint, fade, and teardown; it never takes focus.
+Discovery tracks transport failure separately from capability and retries the failed
+request kind after 5/15/30 seconds using its existing timer and request guard.
+Successful responses reset retries; cleanup cancels pending work and deadlines.
+Menu filter commands omit playback identity/position and retain menu media.
+DvdFilterItem uses fixed XML positions for consistent top padding regardless of description length.
 DvdSessionTask's Filters helper owns setFilter serialization, recoverable rejection
 handling and request-correlated late acknowledgments. It polls the existing session
 status instead of creating a competing session worker. Selected-versus-rendered

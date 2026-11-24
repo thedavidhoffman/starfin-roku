@@ -15,7 +15,7 @@ a single library or catalog returns to the Home DVD card. The header and clock
 remain visible. The library heading uses the same centered `LabelHeading` as the
 movie/TV library, including its large bold font, theme color, and vertical position.
 Inside a library, the heading is prefixed with `DVD: `; the chooser retains `DVD libraries`.
-Titles inside a library use the account's DVD titles poster-column preference (3-6, default 6). Both DVD grids use a
+Titles inside a library use a fixed five-column poster layout. Both DVD grids use a
 24-pixel vertical row gap in the 1080p design space, preserving room below title
 and caption lines; horizontal spacing and card geometry follow the shared layouts.
 
@@ -108,14 +108,12 @@ Identify, scanning, and metadata configuration remain in Jellyfin administration
 
 ## DVD title layout settings
 
-Settings > DVD contains Title columns with just 3, 4, 5, and 6 buttons (default 6).
-Poster presentation remains fixed; no Poster/Thumb/Detailed controls or unavailable
-placeholders are displayed. The existing account-scoped `dvd-titles-layout` value
-is preserved, using the normal SettingsStore save/cancel behavior. Unsupported
-presentations fall back to Poster with six columns. The old DVD row has been
-removed from Settings > Libraries.
+DVD title grids use five poster columns. The column setting has been removed
+from Settings > DVD and from SettingsStore defaults, account keys and normalization.
+Previously saved `dvd-titles-layout` values are ignored; no registry migration is needed.
+Folder cards remain four-column thumbnails.
 
-The same DVD category offers Menu highlights: Original DVD (default) or Rectangle.
+Settings > DVD offers Menu highlights: Original DVD (default) or Rectangle.
 The account-scoped `dvd-menu-highlights` key stores `original` or `rectangle`;
 missing/invalid values default to original. MainScene passes an explicit
 `useOriginalHighlights` boolean at player creation. Rectangle mode bypasses sheet
@@ -124,19 +122,11 @@ Both preserve suppressed auto-action highlights and existing navigation. The cho
 applies to all DVDs on this Roku for that account, takes effect on the next DVD
 opening, and is not synced to Jellyfin or stored per disc.
 
-DvdLibraryPage receives settings explicitly from MainScene, including updates to
-an already open/retained page. It applies shared poster grid sizes and focus assets;
-DvdPosterCard applies matching masks, image dimensions, and physical-pixel poster
-request widths. Layout changes retain the selected group and sort without fetching
-the library again. Folder selection remains four-column thumbnails.
-
-Three-column cards follow the shared poster presentation: the grid starts at the
-shared 207-pixel top position and the year/disc-count caption is hidden to keep
-the title within the screen. Other column counts retain both caption values.
-
-Deferred device checks include all four sizes at 1080p/720p, image/highlight
-alignment, settings navigation and save/cancel, account restoration, open-page
-updates, and unchanged folder navigation. No tests or builds were run for this change.
+DvdLibraryPage owns its fixed five-column shared grid spec. DvdPosterCard uses
+matching masks, image dimensions, and poster request widths. The browser no longer
+receives layout settings from MainScene. Deferred device checks cover five-column
+layout at 1080p/720p, image/highlight alignment, remaining DVD settings navigation,
+and unchanged folder navigation. No tests or builds were run for this change.
 
 ## DVD browse preferences (plugin 0.1.44)
 
@@ -324,9 +314,10 @@ Seamless transitions between finite media units are not claimed.
 ## Playback controls: transport version 1
 
 The [agreed transport scope](dvd-playback-controls-handoff.md) supersedes the
-Previous/Next and title-timeline proposal. The dedicated DvdPlaybackControls
-component displays a centered Play/Pause button and available name/year metadata.
-Previous/Next, custom chapter selection, and a title progress bar are omitted.
+Previous/Next proposal. The dedicated DvdPlaybackControls component displays a
+centered Play/Pause button and available name/year metadata. The later additive
+title-timing contract enables the informational timeline described below.
+Previous/Next and custom chapter selection remain omitted.
 Authored menus remain responsible for scene selection and audio choices.
 
 Capabilities and current transport flags gate actions; absent fields disable them.
@@ -336,7 +327,8 @@ old playback identity, and follows the new native snapshots. The session task
 includes its latest snapshot in command acknowledgments, including 409 refreshes.
 
 OK/direction reveals controls without performing an action. Play toggles directly;
-Options requests DVD Menu. Directional presses keep focus on the single control. Auto-hide is
+Options requests DVD Menu. Left/Right moves between Filter and Play/Pause; the
+timeline never takes focus. Auto-hide is
 five seconds while playing; pause/buffering keeps the overlay visible. Back hides
 visible controls first, then requests returnToLastMenu during playback/stills. Plugin 0.1.27 restores its latest interactive menu and selected button, or performs Root/Title fallback if no checkpoint exists. Back from an authored menu exits. DVD menus hide the overlay;
 Options can still request the authored menu when available. Overlay timers stop
@@ -384,28 +376,50 @@ finite/indefinite stills without a badge, unchanged-menu command acknowledgments
 background continuity, and retained library selection. No tests, builds, automated
 validation or device checks were run for this removal.
 
-## Compact playback overlay
+## Playback overlay and informational title timeline
 
-DVD controls use a single bottom row: the shared 75-pixel Play/Pause button at
-the left, with the title and an optional year/runtime line alongside it. Missing
-metadata is omitted without a dangling separator; the title centers vertically
-beside the button when both year and runtime are absent. There is no timeline,
-scrubbing affordance, or reserved timeline space.
+DVD controls match the standard library player's lower-screen layout: title at
+[103,760], year/runtime beneath it, the 1714-by-12 timeline at [103,885], and
+Play/Pause at [923,962]. The same white track/fill, 20-by-26 rectangular playhead,
+elapsed/negative remaining labels, fonts, and full bottom gradient are used.
+The top-right Clock remains visible with the controls. Playback Filters uses the
+shared compact Media Info pill style at [102,970.5], with measured label width
+and a 600-pixel cap. Left selects Filter; Right selects Play/Pause. The timeline
+is nonfocusable and has no seek, scrub, preview, or remote transport action.
 
-The existing soft bottom gradient is fitted into the bottom 280 pixels of the
-1080p design layout. The shared Clock uses the standard player's top-right
-position and styling. It is a child of the controls overlay, so clock and controls
-show/hide together and remain hidden on authored menus. Remote behavior and
-the five-second auto-hide remain unchanged. Standard player components and
-artwork are unchanged.
+DvdPlayer's feature-local Timeline helper derives presentation only from the
+accepted current-session snapshot and its matching active Video playback ID.
+The server must advertise `capabilities.titleTimeline`, provide a matching disc
+and positive authored title number, `titleTimeline.status: available`, and positive
+finite `durationSeconds`. Version 2 supplies measured piecewise output-to-title
+ranges; progress is available only inside a range. Equal title endpoints represent
+a hold. Older linear mappings use finite `titleOffsetSeconds` plus Video.position.
+Every replacement playback supplies its own mapping. Requested resume positions
+and filter checkpoints are never substitutes for measured timeline coverage.
 
-Both Back dismissal and auto-hide explicitly release the overlay's Play/Pause
-child focus before returning focus to DvdPlayer. Hidden controls do not consume
-directional input or reacquire focus. Repeated DOWN → dismiss → DOWN and timed
-auto-hide → DOWN cycles remain deferred device acceptance scenarios.
+Existing one-second Video position notifications update only timeline presentation,
+before the independent 15-second progress-report gate. Updates do not change
+focus, restart auto-hide, refresh filters, or add requests. Paused/buffering video
+uses its actual reported position without wall-clock extrapolation. Snapshot
+updates can make timing available or revoke it without replacing the Video node.
+Startup/preparation, missing/unknown mappings, origin-pending, unavailable timing,
+menus/stills, playback failure and cleanup hide the timeline. Runtime-only
+metadata remains when supplied. Older plugins therefore retain usable controls.
+Stale node callbacks and older snapshot revisions cannot restore an old mapping.
+Timeline availability logs once per playback ID or reason change, identifying the
+failed client eligibility check or the backend status/reason. Position ticks do
+not log while timing is available.
 
-Source/diff review only; gradient contrast, long titles, missing metadata, clock
-visibility and layout at 1080p/720p await authorized device checks.
+Back dismissal and auto-hide release child focus before returning to DvdPlayer.
+The existing five-second auto-hide and filter spinner behavior are unchanged;
+standard-player source and assets remain unchanged.
+
+Source/diff review only; no test changes, builds, automated validation, deployment,
+or device checks. Deferred acceptance: beginning/chapter/resume/filter origins;
+same-title unit replacement and authored title changes; pending/available/revoked
+mapping; missing or invalid data; paused/buffering updates; stale callbacks and
+cleanup; remote focus and repeated show/hide; full Filter label and layout at
+1080p/720p. Runtime verification requires a backend deployed with title timing.
 
 ## Saved DVD resume (plugin 0.1.53)
 
@@ -518,23 +532,43 @@ submenu transitions, background continuity and unchanged command behavior.
 
 ## Playback video filters
 
-DVD playback controls offer a Video filter button beside Play/Pause. Each session
+DVD playback controls offer a left-aligned Playback Filters pill and centered Play/Pause. Each session
 starts with None; the choice is not stored in account settings. Authored menus and
 highlight sheets remain unfiltered. The standard Jellyfin player is unchanged.
 
-DvdFilterDialog opens centered through OverlayHost (900 x 740 in the 1080p
-layout), using the standard dialog backdrop. A vertical MarkupList displays three
-rounded cards with a name, description and checkmark for the accepted selection.
-The list starts 140 pixels below the panel top; supporting text starts 30 pixels
-below the list viewport, keeping the header compact and the instructions separated.
-Up/Down browses; OK selects and dismisses the dialog. Back closes without changing
-the filter. Selecting the active filter simply closes the dialog without a request
-or spinner. Checkbox squares stay dark blue on both focused and unfocused cards;
-selected checkmarks stay white.
-Card highlights follow `focusPercent` during movement rather than waiting for the
-scroll animation to finish. Both background images remain loaded; only highlight
-opacity and contrast change during focus movement. Losing list focus hides the
-highlight. Description and selection rendering stay separate from focus animation.
+DvdFilterDialog opens centered through OverlayHost (1800 x 1000 in the 1080p
+layout), preserving the shared title, divider and content well. Three API-ordered
+category headings sit above equal-width columns. Each column has five 136-pixel
+rows; the current 14 effects are all visible, with the shorter column's fifth slot
+empty. Future filters beyond five scroll within their column. Rounded cards show
+a top-aligned checkbox, name and wrapped description. Descriptions use the existing
+SmallestSystemFont at 0.8 scale, with up to four lines within the available height.
+Filter names use SmallBoldSystemFont at 0.85 scale, below the category-heading
+size but above descriptions. All cards use fixed top alignment: the name starts at
+y=21, checkbox at y=23, and description at y=59. This moderates the top inset
+while preserving internal spacing. The description box is 81 pixels high before
+scaling to retain bottom padding, with
+the same wrapping width and four-line limit.
+Short descriptions leave extra space below rather than moving the text and checkbox.
+Card dimensions, column spacing and navigation remain unchanged. Long-description
+fit remains deferred for device review at 1080p and 720p.
+
+DvdFilterContent owns remote focus on its content Group, deriving card highlights
+from the focused filter rather than waiting for a list animation. MarkupLists own
+row virtualization/scroll positioning but do not independently consume remote keys.
+Up/Down moves within a column; Left/Right moves to the nearest available row in the
+adjacent nonempty column without wrapping. Initial focus is the active filter, or
+the first effect when no effect is active. Refreshes preserve focus by filter ID,
+even if a filter moves between categories. Disabled cards remain focusable for
+reading but ignore OK. Background images stay loaded; focus changes only their
+opacity and text contrast. Checkbox interiors remain dark blue and checks white.
+
+The bottom-left status area displays instructions or capability/errors. A compact
+Clear button sits bottom-right, with no None card. Down from the last filter reaches
+Clear when enabled; Up returns to the last focused filter. Clear emits noFilter.id
+through the same selection event as effects, and is disabled when already selected.
+OK on an enabled effect or Clear dismisses the dialog; Back dismisses without a
+change. Selecting the active effect simply dismisses without a request or spinner.
 
 An actual selection opens a blocking, cancellable Spinner owned by DvdPlayer's
 filter transition state. It covers acknowledgment and replacement buffering, not
@@ -542,12 +576,14 @@ just the command request. Other remote actions are blocked; Back exits DVD playb
 and uses the existing cancellation/session cleanup path. The spinner releases when
 the replacement is playing or paused, on rejection, or on a terminal/menu/still
 transition. Rejections use AppMessage and keep the backend's accepted selection.
-The dialog is not reopened automatically. The standard buffering spinner is hidden
-behind this filter spinner while the transition is active, avoiding duplicate UI.
+The dialog is not reopened automatically. The standard buffering spinner is suppressed
+while this filter spinner is active, avoiding duplicate UI.
 
 Identical presentation updates are suppressed, changed rows update in place and
 catalog loading preserves focus. Routine progress commands do not dim choices:
 selection intent queues behind progress and captures revision/position at dispatch.
+Selection diagnostics log player-side acceptance or blocking state and setFilter dispatch. These are emitted only on
+user selection or dispatch, not on periodic playback updates.
 Toolbar focus stays on the chosen action during temporary disabling; disabled
 buttons ignore OK, and their focus styling returns when they become enabled again.
 Left/Right still moves only to enabled actions.
@@ -556,13 +592,24 @@ If the targeted playback has ended or changed, the intent is rejected locally.
 DvdPlayer's Filters helper owns a session-scoped DvdFilterModel presentation/event
 bridge, catalog requests, capability timer and selection intent. The dialog and
 content only present data and emit intent; MainScene routes opening/closing.
-DvdFiltersTask loads the authenticated Filters catalog on opening or Options retry.
-Names, descriptions and IDs come from the server; a local None entry remains
-available if loading fails. Info is polled every two seconds after responses while
-capability is checking and the panel is open. Shader choices require available;
-None does not require shader capability. All selections wait for playable content
-and serialized transport availability. Closing cancels capability work, not an
-already submitted filter change. Catalog errors remain in the panel; command errors use AppMessage. Server base paths and MediaBrowser authentication are preserved.
+DvdFiltersTask loads the authenticated Filters catalog on DVD startup, picker opening, or Options retry.
+Names, descriptions, category ordering and filter IDs come from the new categories
+and noFilter response. No legacy flat-array parser, hard-coded effect inventory,
+or synthetic None choice remains. The three-category catalog is accepted atomically;
+malformed responses show a retry message without partially replacing existing data.
+Clear requires a loaded noFilter descriptor, but does not require shader capability.
+Info is polled every two seconds while capability is checking and the DVD session
+is active; polling stops once capability resolves. Transport failures are recorded
+separately from the backend capability. Timeout/network and HTTP 5xx failures retry
+the failed request kind after 5, 15 and 30 seconds, then stop automatic retries for
+that failure sequence. A successful response resets the sequence; authentication
+failures and confirmed unavailable responses do not automatically retry. Entry
+points and effects remain unavailable after a failed request until confirmation
+recovers, while active-effect Clear access remains. The same single-request guard
+and timer own retries and two-second checking polls; DVD cleanup cancels both.
+Closing the picker does not
+cancel session-owned availability work; leaving/restarting the DVD does. Shader choices require available. All selections wait for playable content
+and serialized transport availability. Closing the picker does not cancel an already submitted filter change. Catalog errors remain in the panel; command errors use AppMessage. Server base paths and MediaBrowser authentication are preserved.
 
 The session task serializes setFilter with a UUID, current revision/playback ID,
 and the actual Roku position captured at dispatch. Known capability/checkpoint
@@ -586,7 +633,7 @@ Selecting the already selected filter is a local no-op and never waits for a new
 playback ID. Rejected checkpoint changes retain the old player and selection.
 Replaced-player events remain guarded by node/playback identity, progress belongs
 to the new player, and stale queued playback commands are discarded through the
-existing dispatcher. Menus remain unfiltered; this picker is playback-only.
+existing dispatcher. Menus remain unfiltered; the picker is also available from authored menus.
 
 This requires the backend release that replaces streams for all title filter
 changes. The backend handoff reports that implementation is not yet packaged;
@@ -600,3 +647,159 @@ updates and buffering; replacement across all filter pairs while playing/paused;
 same-filter no-ops, zero-based progress and old-player events; late acceptance,
 late rejection, stale IDs and checkpoint failures; cleanup, expiry, and exit while
 pending. Runtime filter availability depends on the deployed backend contract.
+
+## State-based session polling
+
+DvdSessionTask schedules status GETs separately from commands and heartbeats.
+Playing (including paused) and awaitingCompletion use a 15-second interval;
+starting/preparingPlayback and menu-continuation evaluation pending use one second.
+Menus explicitly waitingForInput disable periodic status GETs; commands still wake
+the task and their response snapshots refresh state. Heartbeats remain active.
+Scheduled menus use automaticContinuation.expiresUtc minus serverTimeUtc to set a
+local monotonic deadline, without comparing server timestamps to Roku UTC. The
+menuInstance, timerId and expiry identify the scheduled deadline; repeated snapshots
+cannot postpone it. At expiry, subsequent checks use one second until navigation
+publishes the next state. Null/malformed/unknown continuation data uses a two-second
+fallback and is never interpreted as waitingForInput. Other stills and pending
+filter acknowledgments also use two seconds.
+Encoding-complete/awaitingCompletion does not mean the viewer has reached EOF.
+Stopped, failed, cancelled, and closed sessions do not schedule further polling.
+
+A new command wakes the task and is handled before a periodic status request.
+Accepted create/status/command snapshots, including equal revisions and conflict
+refreshes, reconcile the status deadline using the current state and menu instance. Older revisions do
+not refresh that deadline. Routine progress responses can therefore replace the
+need for periodic GETs. Local timeline ticks and buffering do not request status.
+The existing 15-second playback-progress and 30-second heartbeat schedules remain
+independent; heartbeat responses do not count as session snapshots.
+
+The task waits until the earliest status, heartbeat, finite-still, or command-retry
+deadline, and wakes early for command/cancellation events. Finite stills retain the
+existing expiresUtc/stillComplete behavior; no countdown UI or automatic-menu
+command is introduced. EOF conflicts preserve the original completion UUID and
+retry after one second rather than spinning or waiting for steady-playback polling.
+Existing transport retries and session cleanup remain unchanged. In-flight HTTP
+requests retain their existing timeout/cancellation behavior.
+
+Review is source/diff only. Deferred acceptance covers steady playback and pause
+request counts; commands arriving during a wait; fresh/equal/stale snapshots;
+startup, pending-to-input-only menus, scheduled deadlines, repeated timers and
+menu replacement, older-plugin fallback, finite/indefinite stills; pending filter acceptance/rejection;
+EOF before encoding completion; heartbeat deadlines; cancellation and terminal
+states. No tests, builds, automated validation, device checks, or deployment run.
+
+## Player ownership and reconciliation
+
+Presentation reconciliation is separate from controls rendering. Media/session
+handlers update state, then reconcile filter transition completion, timeline and
+control data, spinner presentation, focus recovery and notices. Controls rendering
+itself performs no focus changes or transition work. Presentation owns overlay
+show/hide and auto-hide timing; the normal and blocking filter spinners have one
+presentation owner. Existing remote behavior and filter-dialog return focus remain.
+
+MenuNavigation owns directional input, local selection, backend selection and
+auto-action activation. Rendering updates backgrounds, geometry and highlight
+sheets without choosing selection. Artwork/atlas-only updates retain local focus;
+new menus (including changed `menuContinuation.menuInstance` identities with
+identical buttons), changed button definitions/selectedButton and successful command
+acknowledgments restore backend selection. Button nodes are retained when their
+geometry and display scale are unchanged. Auto-actions still trigger only from
+user directional input, never rendering or reconciliation.
+Menu instance UUIDs are compared independently of artwork identity. Same-instance
+updates preserve local selection; missing or invalid instance IDs retain the
+existing button/selection comparison for older responses.
+
+MenuPreview owns authenticated HLS/MP4 playback, buffering/loop still coverage,
+fallback/cooldown and stale-event cleanup. Rendering retains ready still artwork
+and compares declared background paths independently of runtime fallback state.
+Lifecycle owns final progress capture and the shared exit/restart/failure cleanup
+path. It detaches/cancels the session worker before releasing Video; the worker
+continues stop/DELETE and signals completion after the page leaves. Resume owns
+only the startup choice and unavailable-resume dialog flow.
+
+Source/diff review only; no tests changed or run, compilation, validation, deployment
+or device checks. Deferred regression scenarios include unchanged-background menu
+updates, artwork-only/atlas-only revisions, different menu instances with identical
+buttons, missing instance IDs, changed geometry, command acknowledgments,
+auto-actions, repeated image replacement, preview fallback and stale events,
+paused filter replacement/rejection, repeated control show/hide, failure/restart,
+and exiting during pending session creation or commands. Refactoring does not
+change backend requests, polling intervals, timeline calculations or DVD commands.
+
+### Measured title timeline (contract version 2)
+
+The server advertises `capabilities.titleTimelineVersion: 2`. A `piecewise`
+mapping supplies bounded `ranges`, each containing `outputStartSeconds`,
+`outputEndSeconds`, `titleStartSeconds`, and `titleEndSeconds`. The player
+interpolates only inside a supplied range using Video.position. Equal title
+endpoints represent a hold; missing coverage hides progress. Pausing therefore
+holds progress without a separate wall clock. Existing playback and disc identity
+guards apply to every replacement stream. Linear mappings remain supported for
+older servers. This display contract does not enable seeking or change polling.
+
+Timeline precision is preserved from the HTTP response to interpolation: DVD
+session requests use `ParseJson`'s `d` flag and timeline values use
+`Number.ToDouble`. The double JSON option is supported from Roku OS 14.6.
+Other HTTP callers retain their existing parsing defaults. A one-tick range at
+long playback positions must not invalidate the surrounding coverage.
+
+Three-column dialog review: source/diffs only; no test changes or execution,
+builds, automated validation, deployment or device checks. Deferred acceptance:
+all 14 effects visible, four-line descriptions at 1080p/720p, row alignment, overflow
+beyond five, unequal/empty columns, Clear return focus/availability, disabled
+choices, refresh/reordering by ID, catalog errors, and command rejection/buffering.
+
+### Playback Filters entry points and menu selection
+
+The dialog title and playback pill use Playback Filters. On an authored menu,
+Play/Pause opens the picker without joining or changing its directional button graph.
+A small nonfocusable translucent dark hint near the bottom reads
+"Press Play/Pause for playback filters." It appears for five seconds on the first
+eligible menu per DVD session, then fades out over 0.4 seconds. It does not repeat
+on submenus. Opening the picker or leaving the menu hides it immediately; session
+cleanup stops its timer/animation and resets eligibility for the next DVD session.
+Content playback retains normal Play/Pause behavior. Options is not advertised or
+used to open menu filters because fullscreen Video can invoke Roku's audio sidebar.
+The hint and playback entry are visible only when capability is available, or when
+an active effect must remain clearable after capability loss. Unknown/checking/unavailable states
+otherwise hide them. The toolbar recovers focus to Play/Pause if its filter entry
+is hidden. The pill retains measured sizing for its longer label.
+
+The menu-origin picker explains: ?Applies when video plays. DVD menus are unaffected.?
+Its command contains revision/filterId but no playback ID or position. Content
+selection still captures the current playback identity/position at dispatch.
+Both paths share request correlation, pending acknowledgment, rejection handling,
+and the cancellable blocking spinner. A menu selection finishes on acknowledgment
+without restarting menu media; its preference applies to subsequent title playback
+in that session only. Same-menu evaluation updates retain the picker; a transition
+away or to a different menu instance dismisses it. Back restores menu hotspot focus.
+No saved user preference or mandatory launch prompt is introduced.
+
+Deferred source-only acceptance: startup capability discovery/checking/failure,
+active-filter Clear after capability loss, menu selection/clear/rejection, timed
+menu navigation while the picker is open, return focus, content replacement,
+cleanup with capability requests pending, and short/long-description balance.
+
+Deferred hint verification: five-second display and fade, no submenu repeats, late capability availability, picker/menu transitions, session cleanup, and normal content Play/Pause. Source/diff review only; no builds or device checks.
+
+### DVD library beta notice
+
+Only title grids display a persistent, nonfocusable rounded
+information card below the heading. Its title is "DVD playback is in beta" and
+its description is "This feature is experimental. Compatibility varies by disc,
+and you may encounter issues with DVD menus, navigation, audio, subtitles, or
+playback. Some discs may not play correctly. Please report problems to help us
+improve the quality of this feature."
+
+The notice uses the existing glass-card artwork and normal light text, with no
+dismissal or acknowledgment. Browse/Sort sits below the notice, right-aligned with
+the displayed grid. The title and wrapped description are measured and vertically
+centered as a group inside the 160-pixel card, with an eight-pixel gap. The fixed
+five-column grid begins at y=450 using its normal card size and focus artwork.
+Error and empty-state messages also sit below the notice. Returning from playback
+retains the browser as before. Source/diff review only; text centering, remote
+scrolling and 1080p/720p layouts await device verification.
+
+The library-card chooser hides the beta notice and retains its original grid and
+status positions. Layout is reconciled when loading a library as well as rendering
+results, so entering or leaving a title grid does not retain the wrong notice spacing.

@@ -1,0 +1,154 @@
+import "pkg:/source/AppMessage.bs"
+import "pkg:/source/AnimationControl.bs"
+
+'-------------------------------------------------------------------------------
+' reconcilePlayerPresentation
+'-------------------------------------------------------------------------------
+sub reconcilePlayerPresentation()
+    reconcileFilterTransition()
+    syncTimeline()
+    publishFilters()
+    syncControls()
+    reconcileFilterHint()
+    reconcileBlockingPresentation()
+    if m.nodes.controls.visible and m.nodes.controls.isInFocusChain() then restorePlayerFocus()
+    if m.native.state = DvdSession.State.Menu and m.native.inFlight = invalid then restorePlayerFocus()
+    if m.nodes.controls.visible and (m.playback.pauseRequested or m.playback.buffering or m.native.navigating) then m.nodes.controlsTimer.control = TimerControl.Command.Stop
+    if m.filters.notice <> "" then
+        message = m.filters.notice
+        m.filters.notice = ""
+        AppMessage.Show(message, "Playback Filters")
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileBlockingPresentation
+'-------------------------------------------------------------------------------
+sub reconcileBlockingPresentation()
+    if m.filters.busy then
+        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.nodes.filterSpinner.control = SpinnerControl.Command.Start
+        m.nodes.filterSpinner.setFocus(true)
+    else
+        hadFocus = m.nodes.filterSpinner.isInFocusChain()
+        m.nodes.filterSpinner.control = SpinnerControl.Command.Stop
+        if m.presentation.loading then
+            m.nodes.spinner.control = SpinnerControl.Command.Start
+        else
+            m.nodes.spinner.control = SpinnerControl.Command.Stop
+        end if
+        if hadFocus then
+            m.nodes.filterSpinner.setFocus(false)
+            restorePlayerFocus()
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' restorePlayerFocus
+'-------------------------------------------------------------------------------
+sub restorePlayerFocus()
+    if not m.loading.active or m.resume.closing or m.resume.prompting or m.filters.open then return
+    if m.filters.busy then
+        m.nodes.filterSpinner.setFocus(true)
+    else if m.loading.failed then
+        m.top.setFocus(true)
+    else if m.nodes.controls.visible then
+        m.nodes.controls.callFunc("focusControls")
+    else if m.native.state = DvdSession.State.Menu and not m.native.navigating and m.native.inFlight = invalid and m.rendering.buttons.DoesExist(m.menu.focused.ToStr()) then
+        m.rendering.buttons[m.menu.focused.ToStr()].setFocus(true)
+    else
+        m.top.setFocus(true)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' showControls
+'-------------------------------------------------------------------------------
+sub showControls()
+    if m.filters.open or m.filters.busy then return
+    if m.loading.failed or m.native.state = DvdSession.State.Menu then return
+    if m.playback.video = invalid and m.native.state <> DvdSession.State.Still then return
+    m.nodes.controls.visible = true
+    reconcilePlayerPresentation()
+    restorePlayerFocus()
+    restartControlsTimer()
+end sub
+
+'-------------------------------------------------------------------------------
+' hideControls
+'-------------------------------------------------------------------------------
+sub hideControls()
+    m.nodes.controlsTimer.control = TimerControl.Command.Stop
+    hadFocus = m.nodes.controls.isInFocusChain()
+    m.nodes.controls.visible = false
+    ' Focusing an ancestor alone can retain the hidden Play/Pause child.
+    m.nodes.controls.callFunc("releaseFocus")
+    if hadFocus then restorePlayerFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' restartControlsTimer
+'-------------------------------------------------------------------------------
+sub restartControlsTimer()
+    if m.filters.open or m.filters.busy then
+        m.nodes.controlsTimer.control = TimerControl.Command.Stop
+        return
+    end if
+    m.nodes.controlsTimer.control = TimerControl.Command.Stop
+    if not m.nodes.controls.visible or m.playback.video = invalid then return
+    if m.playback.video.state <> VideoPlayerState.Value.Playing or m.playback.pauseRequested or m.native.navigating then return
+    m.nodes.controlsTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' onControlsTimeout
+'-------------------------------------------------------------------------------
+sub onControlsTimeout()
+    if not m.loading.active or m.playback.video = invalid then return
+    if m.playback.video.state = VideoPlayerState.Value.Playing and not m.playback.pauseRequested then hideControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' reconcileFilterHint
+'-------------------------------------------------------------------------------
+sub reconcileFilterHint()
+    eligible = m.loading.active and not m.loading.failed and not m.resume.closing and m.native.state = DvdSession.State.Menu and filterEntryVisible() and not m.filters.open and not m.filters.busy
+    if not eligible then
+        hideFilterHint()
+        return
+    end if
+    if m.presentation.filterHint.shown or not canChooseFilter() then return
+    m.presentation.filterHint.shown = true
+    m.presentation.filterHint.elapsed = CreateObject("roTimespan")
+    m.presentation.filterHint.elapsed.Mark()
+    m.nodes.filterHint.opacity = 1
+    m.nodes.filterHint.visible = true
+    m.nodes.filterHintTimer.duration = 5
+    m.nodes.filterHintTimer.control = TimerControl.Command.Start
+end sub
+
+'-------------------------------------------------------------------------------
+' hideFilterHint
+'-------------------------------------------------------------------------------
+sub hideFilterHint()
+    m.nodes.filterHintTimer.control = TimerControl.Command.Stop
+    m.nodes.filterHintFade.control = AnimationControl.Command.Stop
+    m.nodes.filterHint.visible = false
+    m.presentation.filterHint.elapsed = invalid
+end sub
+
+'-------------------------------------------------------------------------------
+' onFilterHintTimeout
+'-------------------------------------------------------------------------------
+sub onFilterHintTimeout()
+    if not m.nodes.filterHint.visible or m.presentation.filterHint.elapsed = invalid then return
+    ' Ignore a queued timeout from an earlier DVD session.
+    remainingSeconds = 5 - m.presentation.filterHint.elapsed.TotalMilliseconds() / 1000.0
+    if remainingSeconds > 0 then
+        m.nodes.filterHintTimer.duration = remainingSeconds
+        m.nodes.filterHintTimer.control = TimerControl.Command.Start
+        return
+    end if
+    m.nodes.filterHintFade.control = AnimationControl.Command.Start
+end sub

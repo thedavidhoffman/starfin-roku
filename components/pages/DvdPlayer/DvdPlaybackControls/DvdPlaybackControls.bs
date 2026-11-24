@@ -1,6 +1,7 @@
 import "pkg:/source/Remote.bs"
 import "pkg:/source/Theme.bs"
 import "pkg:/source/String.bs"
+import "pkg:/source/video-player-helpers/PlaybackControlsLogic.bs"
 
 '-------------------------------------------------------------------------------
 ' init
@@ -13,6 +14,7 @@ sub init()
     m.nodes.metadata.color = colors.text.light.secondary
     initHandlers()
     render()
+    renderTimeline()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -20,6 +22,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initReferences()
     m.nodes = { title: m.top.findNode("title"), metadata: m.top.findNode("metadata"), play: m.top.findNode("playPause"), filter: m.top.findNode("filter") }
+    m.timelineNodes = { group: m.top.findNode("timelineGroup"), fill: m.top.findNode("progressFill"), playhead: m.top.findNode("playhead"), elapsed: m.top.findNode("elapsed"), remaining: m.top.findNode("remaining") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -27,6 +30,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub initHandlers()
     m.top.observeField("presentation", "render")
+    m.top.observeField("timeline", "renderTimeline")
     m.nodes.play.observeField("buttonSelected", "onPlaySelected")
     m.nodes.filter.observeField("buttonSelected", "onFilterSelected")
 end sub
@@ -46,16 +50,20 @@ sub render()
     end if
     m.nodes.metadata.text = metadataText
     m.nodes.metadata.visible = metadataText <> ""
-    titleTop = 935
-    if metadataText = "" then titleTop = 960
-    m.nodes.title.translation = [492, titleTop]
+    m.nodes.filter.visible = presentation.showFilter = true
     m.nodes.filter.enabled = presentation.canFilter
+    if not m.nodes.filter.visible and m.focusState.filter then
+        hadFilterFocus = m.nodes.filter.isInFocusChain()
+        m.focusState.filter = false
+        m.nodes.filter.setFocus(false)
+        m.nodes.filter.hasFocusVisual = false
+        if hadFilterFocus then m.nodes.play.setFocus(true)
+    end if
     m.nodes.play.enabled = presentation.canPause
     iconName = "pause"
     if presentation.paused then iconName = "play"
     m.nodes.play.icon = "pkg:/images/icons/playback-controls/" + iconName + "-unfocused.png"
     m.nodes.play.focusedIcon = "pkg:/images/icons/playback-controls/" + iconName + "-focused.png"
-    if m.top.visible and m.top.isInFocusChain() then focusControls()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -65,7 +73,7 @@ sub focusControls()
     if not m.top.visible then return
     ' Availability changes must not choose a different action for the viewer.
     target = m.nodes.play
-    if m.focusState.filter then target = m.nodes.filter
+    if m.focusState.filter and m.nodes.filter.visible then target = m.nodes.filter
     target.setFocus(true)
     target.hasFocusVisual = target.enabled
 end sub
@@ -97,11 +105,11 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if not press or not m.top.visible then return false
     m.top.interaction = true
     if key = Remote.Key.Left or key = Remote.Key.Right then
-        if key = Remote.Key.Right and m.nodes.filter.enabled then
+        if key = Remote.Key.Left and m.nodes.filter.visible and m.nodes.filter.enabled then
             m.focusState.filter = true
             m.nodes.filter.setFocus(true)
         end if
-        if key = Remote.Key.Left and m.nodes.play.enabled then
+        if key = Remote.Key.Right and m.nodes.play.enabled then
             m.focusState.filter = false
             m.nodes.play.setFocus(true)
         end if
@@ -125,4 +133,25 @@ end sub
 sub focusFilter()
     m.focusState.filter = true
     focusControls()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderTimeline
+'-------------------------------------------------------------------------------
+sub renderTimeline()
+    timeline = m.top.timeline
+    if timeline = invalid then
+        m.timelineNodes.group.visible = false
+        return
+    end if
+    if not timeline.available then
+        m.timelineNodes.group.visible = false
+        return
+    end if
+    progressWidth = 1714 * timeline.elapsed / timeline.duration
+    m.timelineNodes.fill.width = progressWidth
+    m.timelineNodes.playhead.translation = [progressWidth - 10, -7]
+    m.timelineNodes.elapsed.text = PlaybackControlsLogic.FormatTime(timeline.elapsed)
+    m.timelineNodes.remaining.text = "-" + PlaybackControlsLogic.FormatTime(timeline.duration - timeline.elapsed)
+    m.timelineNodes.group.visible = true
 end sub

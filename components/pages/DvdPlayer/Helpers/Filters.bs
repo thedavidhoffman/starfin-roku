@@ -5,7 +5,7 @@ import "pkg:/source/AppMessage.bs"
 ' initFilters
 '-------------------------------------------------------------------------------
 sub initFilters()
-    m.filters = { open: false, busy: false, previousPlaybackId: "", notice: "", model: invalid, task: invalid, serial: 0, items: [], capability: DvdFilter.Capability.Unavailable, message: "", error: "", loading: false, waitingId: "", selectedId: DvdFilter.None }
+    m.filters = { open: false, busy: false, previousPlaybackId: "", notice: "", model: invalid, task: invalid, serial: 0, categories: [], noFilter: invalid, capability: DvdFilter.Capability.Unavailable, message: "", error: "", loading: false, waitingId: "", selectedId: DvdFilter.None, fromMenu: false, discovery: { failed: false, retries: 0, retryKind: "" } }
     m.nodes.filterTimer.observeField("fire", "pollFilterCapability")
     m.nodes.filterSpinner.observeField("cancelRequested", "closeDvdSession")
 end sub
@@ -20,6 +20,7 @@ function canChooseFilter() as boolean
     if m.native.inFlight <> invalid then
         if m.native.inFlight.action <> DvdSession.Action.Progress then return false
     end if
+    if m.native.state = DvdSession.State.Menu then return true
     if m.native.state <> DvdSession.State.Playing and m.native.state <> DvdSession.State.AwaitingCompletion then return false
     if m.native.snapshot = invalid or m.native.snapshot.playback = invalid then return false
     if not DvdPaths.SameId(m.native.snapshot.playback.playbackId, m.playback.id) then return false
@@ -31,19 +32,18 @@ end function
 ' openFilterPicker
 '-------------------------------------------------------------------------------
 sub openFilterPicker()
-    if m.filters.open or not canChooseFilter() then return
+    if m.filters.open or not filterEntryVisible() or not canChooseFilter() then return
     AppMessage.Dismiss()
+    m.filters.fromMenu = m.native.state = DvdSession.State.Menu
     m.filters.open = true
     m.filters.error = ""
-    m.nodes.controlsTimer.control = TimerControl.Command.Stop
-    m.nodes.controls.visible = false
-    m.nodes.controls.callFunc("releaseFocus")
+    hideControls()
     model = CreateObject("roSGNode", "DvdFilterModel")
     m.filters.model = model
     model.observeField("selectionRequested", "onFilterSelected")
     model.observeField("refreshRequested", "refreshFilters")
     refreshFilters()
-    publishFilters()
+    reconcilePlayerPresentation()
     m.top.overlayRequested = { id: DvdMenu.Overlay.Filters, componentName: "DvdFilterDialog", openFunction: "openPicker", closeField: "closeRequested", model: model, generation: m.loading.generation }
 end sub
 
@@ -61,15 +61,21 @@ end sub
 ' pollFilterCapability
 '-------------------------------------------------------------------------------
 sub pollFilterCapability()
-    if m.filters.open and m.filters.capability = DvdFilter.Capability.Checking then requestFilters(DvdFilter.Request.Capability)
+    if not m.loading.active or m.resume.closing then return
+    if m.filters.discovery.retryKind <> "" then
+        requestFilters(m.filters.discovery.retryKind)
+    else if not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Checking then
+        requestFilters(DvdFilter.Request.Capability)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' requestFilters
 '-------------------------------------------------------------------------------
 sub requestFilters(kind as string)
-    if not m.filters.open or m.filters.task <> invalid then return
+    if not m.loading.active or m.resume.closing or m.filters.task <> invalid then return
     m.nodes.filterTimer.control = TimerControl.Command.Stop
+    m.filters.discovery.retryKind = ""
     m.filters.serial++
     m.filters.loading = true
     task = m.top.createChild("DvdFiltersTask")
@@ -97,21 +103,18 @@ end sub
 ' onFiltersResponse
 '-------------------------------------------------------------------------------
 sub onFiltersResponse(event as object)
-    if not m.loading.active or not m.filters.open or m.filters.task = invalid then return
+    if not m.loading.active or m.filters.task = invalid then return
     if not event.getRoSGNode().isSameNode(m.filters.task) then return
     response = event.getData()
     if response.requestId <> m.filters.serial then return
     releaseFiltersTask()
     data = response.data
     if response.ok and type(data) = "roAssociativeArray" then
+        m.filters.discovery = { failed: false, retries: 0, retryKind: "" }
+        m.filters.error = ""
         if response.kind = DvdFilter.Request.Catalog then
-            m.filters.items = []
-            if type(data.filters) = "roArray" then
-                for each item in data.filters
-                    if type(item) = "roAssociativeArray" then
-                        if Strings.Trim(item.id) <> "" and Strings.Trim(item.name) <> "" then m.filters.items.Push(item)
-                    end if
-                end for
+            if not readFilterCatalog(data) then
+                m.filters.error = "Unable to load filter categories. Press Options to retry."
             end if
         end if
         m.filters.capability = DvdFilter.Capability.Unavailable
@@ -123,35 +126,79 @@ sub onFiltersResponse(event as object)
                 m.filters.message = Strings.ToString(capability.message)
             end if
         end if
-        if m.filters.capability = DvdFilter.Capability.Checking then m.nodes.filterTimer.control = TimerControl.Command.Start
+        if m.filters.capability = DvdFilter.Capability.Checking then
+            m.nodes.filterTimer.duration = 2
+            m.nodes.filterTimer.control = TimerControl.Command.Start
+        end if
     else
-        m.filters.capability = DvdFilter.Capability.Unavailable
+        m.filters.discovery.failed = true
         m.filters.message = "Unable to load filters. Press Options to retry."
-        if response.status = 401 or response.status = 403 then m.filters.message = "Filter access was denied. Check your server sign-in."
+        statusCode = Number.ToInteger(response.status, 0)
+        if statusCode = 401 or statusCode = 403 then m.filters.message = "Filter access was denied. Check your server sign-in."
+        retryDelays = [5, 15, 30]
+        if (statusCode <= 0 or (statusCode >= 500 and statusCode < 600)) and m.filters.discovery.retries < retryDelays.Count() then
+            m.filters.discovery.retryKind = response.kind
+            m.nodes.filterTimer.duration = retryDelays[m.filters.discovery.retries]
+            m.filters.discovery.retries++
+            m.filters.message = "Unable to load filters. Retrying shortly..."
+            m.nodes.filterTimer.control = TimerControl.Command.Start
+        end if
     end if
-    publishFilters()
+    reconcilePlayerPresentation()
 end sub
+
+'-------------------------------------------------------------------------------
+' readFilterCatalog
+'-------------------------------------------------------------------------------
+function readFilterCatalog(data as object) as boolean
+    if type(data.categories) <> "roArray" or type(data.noFilter) <> "roAssociativeArray" then return false
+    if data.categories.Count() <> 3 then return false
+    if Strings.Trim(data.noFilter.id) = "" or Strings.Trim(data.noFilter.name) = "" then return false
+    categories = []
+    seen = {}
+    seen[data.noFilter.id] = true
+    for each category in data.categories
+        if type(category) <> "roAssociativeArray" then return false
+        if Strings.Trim(category.name) = "" or type(category.filters) <> "roArray" then return false
+        items = []
+        for each item in category.filters
+            if type(item) <> "roAssociativeArray" then return false
+            if Strings.Trim(item.id) = "" or Strings.Trim(item.name) = "" then return false
+            if seen.DoesExist(item.id) then return false
+            seen[item.id] = true
+            items.Push({ id: item.id, name: item.name, description: Strings.ToString(item.description) })
+        end for
+        categories.Push({ name: category.name, filters: items })
+    end for
+    m.filters.categories = categories
+    m.filters.noFilter = { id: data.noFilter.id, name: data.noFilter.name, description: Strings.ToString(data.noFilter.description) }
+    return true
+end function
 
 '-------------------------------------------------------------------------------
 ' publishFilters
 '-------------------------------------------------------------------------------
 sub publishFilters()
     if not m.filters.open or m.filters.model = invalid then return
-    items = []
-    hasNone = false
+    categories = []
     canSelect = canChooseFilter()
-    for each item in m.filters.items
-        if item.id = DvdFilter.None then hasNone = true
-        items.Push({ id: item.id, name: item.name, description: Strings.ToString(item.description), enabled: canSelect and (item.id = DvdFilter.None or m.filters.capability = DvdFilter.Capability.Available) })
+    for each category in m.filters.categories
+        items = []
+        for each item in category.filters
+            items.Push({ id: item.id, name: item.name, description: item.description, enabled: canSelect and not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Available })
+        end for
+        categories.Push({ name: category.name, filters: items })
     end for
-    if not hasNone then items.Unshift({ id: DvdFilter.None, name: "None", description: "Plays the video without an added visual effect.", enabled: canSelect })
+    clearEnabled = false
+    if m.filters.noFilter <> invalid then clearEnabled = canSelect and m.filters.selectedId <> m.filters.noFilter.id
     message = m.filters.message
-    if m.filters.capability = DvdFilter.Capability.Available then message = "Select to apply. Playback briefly buffers when changing filters."
-    if not canSelect then message = "Waiting for playback..."
+    if not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Available then message = "Select to apply. Playback briefly buffers when changing filters."
+    if m.filters.fromMenu and not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Available then message = "Applies when video plays. DVD menus are unaffected."
+    if not canSelect then message = "Waiting for the DVD..."
     if m.filters.loading then message = "Checking video filters..."
     if m.filters.error <> "" then message = m.filters.error
     if m.filters.waitingId <> "" then message = "Applying..."
-    presentation = { items: items, selectedId: m.filters.selectedId, message: message, loading: m.filters.loading }
+    presentation = { categories: categories, noFilter: m.filters.noFilter, clearEnabled: clearEnabled, selectedId: m.filters.selectedId, message: message, loading: m.filters.loading }
     previous = m.filters.model.presentation
     if previous <> invalid then
         ' This JSON is a local comparison only, never an outbound API body.
@@ -165,18 +212,35 @@ end sub
 '-------------------------------------------------------------------------------
 sub onFilterSelected(event as object)
     if not m.filters.open or m.filters.model = invalid then return
-    if not event.getRoSGNode().isSameNode(m.filters.model) or not canChooseFilter() then return
+    if not event.getRoSGNode().isSameNode(m.filters.model) then return
+    if not canChooseFilter() then
+        playerState = "no-video"
+        if m.playback.video <> invalid then playerState = m.playback.video.state
+        commandAction = "none"
+        if m.native.inFlight <> invalid then commandAction = m.native.inFlight.action
+        m.log.write("Filter selection blocked state=" + m.native.state + " video=" + playerState + " started=" + m.playback.started.ToStr() + " completed=" + m.playback.completed.ToStr() + " busy=" + m.filters.busy.ToStr() + " inFlight=" + commandAction + " queued=" + m.native.queue.Count().ToStr())
+        return
+    end if
     filterId = event.getData()
-    allowed = filterId = DvdFilter.None
-    for each item in m.filters.items
-        if item.id = filterId and m.filters.capability = DvdFilter.Capability.Available then allowed = true
+    m.log.write("Filter selection received id=" + filterId + " selected=" + m.filters.selectedId + " capability=" + m.filters.capability)
+    allowed = false
+    if m.filters.noFilter <> invalid then allowed = filterId = m.filters.noFilter.id
+    for each category in m.filters.categories
+        for each item in category.filters
+            if item.id = filterId and not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Available then allowed = true
+        end for
     end for
     if not allowed then return
     if filterId = m.filters.selectedId then
         m.filters.model.dismissRequested = true
         return
     end if
-    command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.SetFilter, filterId: filterId, playbackId: m.playback.id }
+    command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.SetFilter, filterId: filterId }
+    if m.native.state = DvdSession.State.Menu then
+        command.revision = m.native.revision
+    else
+        command.playbackId = m.playback.id
+    end if
     m.filters.error = ""
     m.filters.waitingId = command.requestId
     m.filters.busy = true
@@ -185,7 +249,7 @@ sub onFilterSelected(event as object)
     hideControls()
     m.native.queue.Push(command)
     dispatchCommand()
-    syncControls()
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -208,7 +272,7 @@ sub handleFilterResult(response as object)
         if response.errorCode = DvdFilter.Error.StaleRevision or response.errorCode = DvdFilter.Error.StalePlayback then m.filters.error = "Playback changed. Select the filter again to retry."
         if response.errorCode = DvdFilter.Error.Checking or response.errorCode = DvdFilter.Error.Unavailable then
             m.filters.capability = DvdFilter.Capability.Unavailable
-            if m.filters.open then requestFilters(DvdFilter.Request.Capability)
+            requestFilters(DvdFilter.Request.Capability)
         end if
         m.filters.notice = m.filters.error
     else if m.native.snapshot <> invalid then
@@ -227,8 +291,9 @@ sub handleFilterClosed(request as object)
     if request.generation <> m.loading.generation or not request.model.isSameNode(m.filters.model) then return
     releaseFilterPicker()
     if not m.loading.active or m.resume.closing then return
+    reconcilePlayerPresentation()
     if m.loading.failed then
-        m.top.setFocus(true)
+        restorePlayerFocus()
     else if m.native.state = DvdSession.State.Menu then
         focusButton(m.menu.focused)
     else
@@ -242,8 +307,6 @@ end sub
 '-------------------------------------------------------------------------------
 sub releaseFilterPicker()
     m.filters.open = false
-    m.nodes.filterTimer.control = TimerControl.Command.Stop
-    releaseFiltersTask()
     if m.filters.model <> invalid then
         m.filters.model.unobserveField("selectionRequested")
         m.filters.model.unobserveField("refreshRequested")
@@ -260,9 +323,9 @@ sub dismissFilterPicker()
 end sub
 
 '-------------------------------------------------------------------------------
-' syncFilterTransition
+' reconcileFilterTransition
 '-------------------------------------------------------------------------------
-sub syncFilterTransition()
+sub reconcileFilterTransition()
     if m.filters.busy then
         if m.loading.failed or m.resume.closing or m.native.state = DvdSession.State.Failed or m.native.state = DvdSession.State.Stopped then
             m.filters.busy = false
@@ -276,17 +339,11 @@ sub syncFilterTransition()
             end if
         end if
     end if
-    if m.filters.busy then
-        m.nodes.spinner.opacity = 0
-        m.nodes.filterSpinner.control = SpinnerControl.Command.Start
-        m.nodes.filterSpinner.setFocus(true)
-    else
-        hadFocus = m.nodes.filterSpinner.isInFocusChain()
-        m.nodes.filterSpinner.control = SpinnerControl.Command.Stop
-        m.nodes.spinner.opacity = 1
-        if hadFocus then
-            m.nodes.filterSpinner.setFocus(false)
-            m.top.setFocus(true)
-        end if
-    end if
 end sub
+
+'-------------------------------------------------------------------------------
+' filterEntryVisible
+'-------------------------------------------------------------------------------
+function filterEntryVisible() as boolean
+    return (not m.filters.discovery.failed and m.filters.capability = DvdFilter.Capability.Available) or m.filters.selectedId <> DvdFilter.None
+end function

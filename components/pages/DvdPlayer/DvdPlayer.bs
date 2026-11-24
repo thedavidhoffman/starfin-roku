@@ -1,3 +1,7 @@
+import "pkg:/components/pages/DvdPlayer/Helpers/Lifecycle.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/MenuNavigation.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/MenuPreview.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Presentation.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Resume.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Filters.bs"
 import "pkg:/source/Number.bs"
@@ -14,6 +18,7 @@ import "pkg:/components/pages/DvdPlayer/Helpers/SessionContracts.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Rendering.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Playback.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/TransportControls.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/Timeline.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Paths.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/MenuModel.bs"
 
@@ -27,11 +32,13 @@ sub init()
     m.loading = { active: false, generation: 0, task: invalid, failed: false }
     m.native = { task: invalid, requestId: "", revision: -1, state: "", snapshot: invalid, queue: [], inFlight: invalid, navigating: false }
     m.menu = { manifest: invalid, focused: 0 }
-    m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {} }
+    m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {}, rect: invalid }
     m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
     m.resume = { requestId: "", mode: DvdSession.StartMode.Normal, prompting: false, closing: false }
     m.highlights = { identity: "", descriptor: invalid, root: invalid, clip: invalid, poster: invalid, state: DvdHighlight.State.Selected }
     m.transport = { title: "", year: "" }
+    m.presentation = { loading: false, filterHint: { shown: false, elapsed: invalid } }
+    m.timeline = { diagnosticKey: "" }
     initFilters()
     initHandlers()
     onLoadRequestChanged()
@@ -41,7 +48,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), controlsTimer: m.top.findNode("controlsHideTimer"), filterTimer: m.top.findNode("filterCapabilityTimer"), filterSpinner: m.top.findNode("filterChangeSpinner") }
+    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), filterHint: m.top.findNode("filterHint"), filterHintTimer: m.top.findNode("filterHintTimer"), filterHintFade: m.top.findNode("filterHintFade"), controlsTimer: m.top.findNode("controlsHideTimer"), filterTimer: m.top.findNode("filterCapabilityTimer"), filterSpinner: m.top.findNode("filterChangeSpinner") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -53,6 +60,7 @@ sub initHandlers()
     m.nodes.controls.observeField("filterPressed", "openFilterPicker")
     m.nodes.controls.observeField("interaction", "restartControlsTimer")
     m.nodes.controlsTimer.observeField("fire", "onControlsTimeout")
+    m.nodes.filterHintTimer.observeField("fire", "onFilterHintTimeout")
 end sub
 
 '-------------------------------------------------------------------------------
@@ -79,73 +87,22 @@ sub activate()
             beginLoad()
         end if
     else if m.nodes.controls.visible then
-        m.nodes.controls.callFunc("focusControls")
+        restorePlayerFocus()
     else if m.native.state = DvdSession.State.Menu then
         focusButton(m.menu.focused)
     else
-        if not m.filters.open then m.top.setFocus(true)
+        if not m.filters.open then restorePlayerFocus()
     end if
-end sub
-
-'-------------------------------------------------------------------------------
-' deactivate
-'-------------------------------------------------------------------------------
-sub deactivate()
-    hideControls()
-    m.loading.active = false
-    abandonSession()
-    releaseTask()
-    clearMenu()
-    releaseContentVideo()
-    m.nodes.spinner.control = SpinnerControl.Command.Stop
-    m.top.visible = false
-end sub
-
-'-------------------------------------------------------------------------------
-' releaseTask
-'-------------------------------------------------------------------------------
-sub releaseTask()
-    task = m.loading.task
-    m.loading.task = invalid
-    if task = invalid then return
-    task.unobserveField("response")
-    task.control = TaskControl.Command.Stop
-    m.top.removeChild(task)
-end sub
-
-'-------------------------------------------------------------------------------
-' abandonSession
-'-------------------------------------------------------------------------------
-sub abandonSession()
-    dismissFilterPicker()
-    m.filters.waitingId = ""
-    m.filters.busy = false
-    m.filters.notice = ""
-    syncFilterTransition()
-    m.filters.selectedId = DvdFilter.None
-    task = m.native.task
-    m.native.task = invalid
-    m.native.queue = []
-    m.native.inFlight = invalid
-    if task = invalid then return
-    task.unobserveField("response")
-    if task.finalCommand = invalid then task.finalCommand = finalPositionCommand(DvdSession.Action.Stop)
-    task.cancelRequested = true
-    ' Leave the worker running so a late POST is followed by DELETE.
-    m.top.removeChild(task)
 end sub
 
 '-------------------------------------------------------------------------------
 ' beginLoad
 '-------------------------------------------------------------------------------
 sub beginLoad()
-    hideControls()
-    abandonSession()
-    releaseTask()
-    clearMenu()
-    releaseContentVideo()
+    releaseSessionResources()
     m.loading.generation++
     m.loading.failed = false
+    requestFilters(DvdFilter.Request.Catalog)
     m.native.revision = -1
     m.native.state = ""
     m.native.snapshot = invalid
@@ -153,8 +110,8 @@ sub beginLoad()
     m.nodes.status.text = ""
     m.nodes.host.visible = true
     m.nodes.contentHost.visible = false
-    m.nodes.spinner.control = SpinnerControl.Command.Start
-    m.top.setFocus(true)
+    m.presentation.loading = true
+    restorePlayerFocus()
     task = m.top.createChild("DvdDemoTask")
     m.loading.task = task
     request = {}
@@ -164,6 +121,7 @@ sub beginLoad()
     task.observeField("response", "onDemoResponse")
     m.top.taskCreated = task
     task.control = TaskControl.Command.Run
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -212,7 +170,8 @@ sub onSessionResponse(event as object)
             m.top.closeRequested = true
         else if response.errorCode = "resume-unavailable" then
             releaseContentVideo()
-            m.nodes.spinner.control = SpinnerControl.Command.Stop
+            m.presentation.loading = false
+            reconcileBlockingPresentation()
             promptResume(true)
         else if Strings.ToString(response.message) <> "" then
             showFailure(response.message)
@@ -235,7 +194,7 @@ sub onSessionResponse(event as object)
                 if m.native.state = DvdSession.State.Menu then renderMenuHighlight()
                 reconcileContentPause()
                 dispatchCommand()
-                syncControls()
+                reconcilePlayerPresentation()
                 restartControlsTimer()
             end if
         end if
@@ -260,6 +219,7 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
     m.resume.mode = DvdSession.StartMode.Normal
     if revision = m.native.revision then
         m.native.snapshot = snapshot
+        syncTimeline()
         if restoreMenuSelection and snapshot.state = DvdSession.State.Menu then restoreBackendMenuSelection(snapshot.menu)
         return
     end if
@@ -269,7 +229,19 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
     m.native.snapshot = snapshot
     m.native.state = snapshot.state
     state = snapshot.state
-    if state = DvdSession.State.Menu or state = DvdSession.State.Still or state = DvdSession.State.Failed or state = DvdSession.State.Stopped then dismissFilterPicker()
+    if m.filters.open then
+        ' A menu picker survives evaluation updates, but not authored navigation.
+        keepPicker = m.filters.fromMenu and state = DvdSession.State.Menu and previousState = DvdSession.State.Menu
+        if keepPicker then
+            currentContinuation = snapshot.menuContinuation
+            oldContinuation = previousSnapshot.menuContinuation
+            if type(currentContinuation) = "roAssociativeArray" and type(oldContinuation) = "roAssociativeArray" then
+                keepPicker = DvdPaths.SameId(currentContinuation.menuInstance, oldContinuation.menuInstance)
+            end if
+        end if
+        if m.filters.fromMenu and not keepPicker then dismissFilterPicker()
+        if not m.filters.fromMenu and (state = DvdSession.State.Menu or state = DvdSession.State.Still or state = DvdSession.State.Failed or state = DvdSession.State.Stopped) then dismissFilterPicker()
+    end if
     if state <> DvdSession.State.Menu then clearHighlightSheet()
     m.log.write("Native session state=" + state + " revision=" + revision.ToStr())
     preparing = state = DvdSession.State.Starting or state = DvdSession.State.Preparing
@@ -287,28 +259,20 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
         if m.playback.timer <> invalid then m.playback.timer.control = TimerControl.Command.Stop
         if keepMenu then
-            m.nodes.spinner.control = SpinnerControl.Command.Stop
+            m.presentation.loading = false
         else
-            m.nodes.spinner.control = SpinnerControl.Command.Start
+            m.presentation.loading = true
         end if
-        if not m.filters.open then m.top.setFocus(true)
+        if not m.filters.open then restorePlayerFocus()
     else if state = DvdSession.State.Menu then
         hideControls()
         m.native.navigating = false
         releaseContentVideo()
         m.nodes.contentHost.visible = false
         m.nodes.host.visible = true
-        sameMenu = false
-        if previousState = DvdSession.State.Menu and previousSnapshot <> invalid then
-            ' A timing-only revision must preserve the user's locally selected hotspot.
-            sameMenu = FormatJson(previousSnapshot.menu) = FormatJson(snapshot.menu)
-        end if
-        if not sameMenu then
-            renderScreen(snapshot.menu)
-        else if restoreMenuSelection then
-            restoreBackendMenuSelection(snapshot.menu)
-        end if
-        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        renderScreen(snapshot.menu)
+        reconcileMenuSelection(snapshot, previousSnapshot, restoreMenuSelection)
+        m.presentation.loading = false
     else if state = DvdSession.State.Playing or state = DvdSession.State.AwaitingCompletion then
         clearMenu()
         m.native.navigating = false
@@ -318,23 +282,23 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         stopPreview()
         if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
         if m.playback.timer <> invalid then m.playback.timer.control = TimerControl.Command.Stop
-        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.presentation.loading = false
         m.nodes.status.text = ""
-        if not m.filters.open then m.top.setFocus(true)
+        if not m.filters.open then restorePlayerFocus()
     else if state = DvdSession.State.Failed then
         hideControls()
         stopPreview()
         releaseContentVideo()
         m.nodes.contentHost.visible = false
         m.nodes.host.visible = false
-        m.nodes.spinner.control = SpinnerControl.Command.Stop
+        m.presentation.loading = false
         m.nodes.status.text = Strings.ToString(snapshot.error, "Native DVD session failed.")
     else if state <> DvdSession.State.Stopped then
         throw "Unknown native DVD state."
     end if
     reconcileContentPause()
-    syncControls()
-    if m.nodes.controls.visible and not m.filters.open then m.nodes.controls.callFunc("focusControls")
+    reconcilePlayerPresentation()
+    if m.nodes.controls.visible and not m.filters.open then restorePlayerFocus()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -361,7 +325,7 @@ sub queueCommand(action as string, playbackId = invalid as dynamic, value = inva
     end if
     m.native.queue.Push(command)
     dispatchCommand()
-    syncControls()
+    reconcilePlayerPresentation()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -380,7 +344,7 @@ sub dispatchCommand()
             valid = command.revision = m.native.revision
         end if
         if valid and command.action = DvdSession.Action.SetFilter then
-            valid = false
+            valid = command.playbackId = invalid and m.native.state = DvdSession.State.Menu
             if (m.native.state = DvdSession.State.Playing or m.native.state = DvdSession.State.AwaitingCompletion) and m.playback.video <> invalid and DvdPaths.SameId(m.playback.id, command.playbackId) then
                 position = Number.ToFloat(m.playback.video.position, -1)
                 if position >= 0 and not m.playback.completed and not m.playback.failed then
@@ -391,6 +355,7 @@ sub dispatchCommand()
             end if
         end if
         if valid then
+            if command.action = DvdSession.Action.SetFilter then m.log.write("Filter command dispatch id=" + command.filterId + " requestId=" + command.requestId)
             m.native.inFlight = command
             m.native.task.command = command
             return
@@ -400,24 +365,6 @@ sub dispatchCommand()
             m.native.navigating = false
         end if
     end while
-end sub
-
-'-------------------------------------------------------------------------------
-' showFailure
-'-------------------------------------------------------------------------------
-sub showFailure(message as string)
-    clearHighlightSheet()
-    hideControls()
-    abandonSession()
-    releaseTask()
-    stopPreview()
-    releaseContentVideo()
-    m.loading.failed = true
-    m.nodes.contentHost.visible = false
-    m.nodes.host.visible = false
-    m.nodes.spinner.control = SpinnerControl.Command.Stop
-    m.nodes.status.text = message + Chr(10) + "Press OK to restart the DVD or Back to leave."
-    m.top.setFocus(true)
 end sub
 
 '-------------------------------------------------------------------------------
@@ -448,13 +395,15 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     if m.filters.busy then return true
     if key = Remote.Key.Options then
-        requestDvdMenu()
+        if m.native.state <> DvdSession.State.Menu then requestDvdMenu()
         return true
     end if
     if m.native.navigating then return true
     if m.native.state = DvdSession.State.Menu then
         if m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return true
-        if key = Remote.Key.OK then
+        if key = Remote.Key.Play or key = Remote.Key.PlayPause then
+            openFilterPicker()
+        else if key = Remote.Key.OK then
             activateMenuButton(m.menu.focused)
         else if key = Remote.Key.Up or key = Remote.Key.Down or key = Remote.Key.Left or key = Remote.Key.Right then
             navigateMenu(key)
@@ -469,37 +418,3 @@ function onKeyEvent(key as string, press as boolean) as boolean
     return true
 end function
 
-'-------------------------------------------------------------------------------
-' activateMenuButton
-'-------------------------------------------------------------------------------
-sub activateMenuButton(buttonId as integer)
-    if m.native.task = invalid or m.native.state <> DvdSession.State.Menu then return
-    if m.native.navigating or m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return
-    if not m.rendering.buttons.DoesExist(buttonId.ToStr()) then return
-    m.native.navigating = true
-    m.highlights.state = DvdHighlight.State.Activated
-    renderMenuHighlight()
-    queueCommand(DvdSession.Action.Button, invalid, buttonId)
-end sub
-
-'-------------------------------------------------------------------------------
-' navigateMenu
-'-------------------------------------------------------------------------------
-sub navigateMenu(direction as string)
-    destination = 0
-    for each button in m.rendering.geometry
-        if button.id = m.menu.focused then
-            destination = Number.ToInteger(button[direction], 0)
-            exit for
-        end if
-    end for
-    if not m.rendering.buttons.DoesExist(destination.ToStr()) then return
-    for each button in m.rendering.geometry
-        if button.id = destination then
-            focusButton(destination)
-            ' Only a user directional selection triggers authored auto-action.
-            if button.autoAction = true then activateMenuButton(destination)
-            return
-        end if
-    end for
-end sub

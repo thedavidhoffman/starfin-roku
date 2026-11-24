@@ -1,23 +1,43 @@
 import "pkg:/source/Remote.bs"
-import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
-    m.nodes = { list: m.top.findNode("filters"), status: m.top.findNode("status") }
-    m.catalog = { initialized: false }
-    m.nodes.list.observeField("itemSelected", "onFilterSelected")
-    m.top.observeField("model", "onModelChanged")
+    initReferences()
+    m.navigation = { column: 0, row: 0, clear: false, initialized: false }
+    m.binding = { model: invalid, presentation: invalid }
+    initHandlers()
     onModelChanged()
+end sub
+
+'-------------------------------------------------------------------------------
+' initReferences
+'-------------------------------------------------------------------------------
+sub initReferences()
+    m.nodes = { lists: [], headings: [], status: m.top.findNode("status"), clear: m.top.findNode("clear") }
+    for columnIndex = 0 to 2
+        m.nodes.lists.Push(m.top.findNode("filters" + columnIndex.ToStr()))
+        m.nodes.headings.Push(m.top.findNode("category" + columnIndex.ToStr()))
+    end for
+end sub
+
+'-------------------------------------------------------------------------------
+' initHandlers
+'-------------------------------------------------------------------------------
+sub initHandlers()
+    m.top.observeField("model", "onModelChanged")
+    m.top.observeField("focusedChild", "renderFocus")
 end sub
 
 '-------------------------------------------------------------------------------
 ' onModelChanged
 '-------------------------------------------------------------------------------
 sub onModelChanged()
-    if m.top.model = invalid then return
-    m.top.model.observeFieldScoped("presentation", "render")
+    if m.binding.model <> invalid then m.binding.model.unobserveFieldScoped("presentation")
+    m.binding.model = m.top.model
+    if m.binding.model = invalid then return
+    m.binding.model.observeFieldScoped("presentation", "render")
     render()
 end sub
 
@@ -25,77 +45,172 @@ end sub
 ' render
 '-------------------------------------------------------------------------------
 sub render()
-    state = m.top.model.presentation
+    state = m.binding.model.presentation
     if state = invalid then return
-    content = m.nodes.list.content
     focusedId = ""
-    focusedIndex = Number.ToInteger(m.nodes.list.itemFocused, 0)
-    rebuild = content = invalid
-    if content <> invalid then
-        focused = content.getChild(focusedIndex)
-        if focused <> invalid then focusedId = focused.id
-        rebuild = content.getChildCount() <> state.items.Count()
-        if not rebuild then
-            for itemIndex = 0 to state.items.Count() - 1
-                if content.getChild(itemIndex).id <> state.items[itemIndex].id then rebuild = true
-            end for
+    previous = focusedEntry()
+    if previous <> invalid then focusedId = previous.id
+    m.binding.presentation = state
+    if not m.navigation.initialized then focusedId = state.selectedId
+    target = invalid
+    firstItem = invalid
+    for columnIndex = 0 to 2
+        list = m.nodes.lists[columnIndex]
+        items = []
+        m.nodes.headings[columnIndex].text = ""
+        if columnIndex < state.categories.Count() then
+            category = state.categories[columnIndex]
+            items = category.filters
+            m.nodes.headings[columnIndex].text = category.name
         end if
+        content = list.content
+        rebuild = content = invalid
+        if content <> invalid then
+            rebuild = content.getChildCount() <> items.Count()
+            if not rebuild then
+                for itemIndex = 0 to items.Count() - 1
+                    if content.getChild(itemIndex).id <> items[itemIndex].id then rebuild = true
+                end for
+            end if
+        end if
+        if rebuild then content = CreateObject("roSGNode", "ContentNode")
+        for itemIndex = 0 to items.Count() - 1
+            item = items[itemIndex]
+            if firstItem = invalid then firstItem = { column: columnIndex, row: itemIndex }
+            if item.id = focusedId then target = { column: columnIndex, row: itemIndex }
+            if rebuild then
+                entry = content.createChild("ContentNode")
+                entry.id = item.id
+                entry.addField("filterPresentation", "assocarray", true)
+            else
+                entry = content.getChild(itemIndex)
+            end if
+            rowState = { name: item.name, description: item.description, selected: item.id = state.selectedId, enabled: item.enabled, focused: false }
+            oldState = entry.filterPresentation
+            if oldState <> invalid then rowState.focused = oldState.focused
+            if FormatJson(oldState) <> FormatJson(rowState) then entry.filterPresentation = rowState
+        end for
+        if rebuild then list.content = content
+    end for
+    if target = invalid then target = firstItem
+    if target <> invalid then
+        m.navigation.column = target.column
+        m.navigation.row = target.row
+        m.navigation.initialized = true
     end if
-    if rebuild then content = CreateObject("roSGNode", "ContentNode")
-    selectedPresent = false
-    for each item in state.items
-        if item.id = state.selectedId then selectedPresent = true
-    end for
-    ' Cached choices can be focused immediately; the refresh must not jump back later.
-    initialSelection = not m.catalog.initialized and (selectedPresent or not state.loading)
-    if initialSelection then focusedId = state.selectedId
-    nextIndex = 0
-    for itemIndex = 0 to state.items.Count() - 1
-        item = state.items[itemIndex]
-        if rebuild then
-            entry = content.createChild("ContentNode")
-            entry.id = item.id
-            entry.addField("filterPresentation", "assocarray", true)
-        else
-            entry = content.getChild(itemIndex)
-        end if
-        rowPresentation = { name: item.name, description: item.description, selected: item.id = state.selectedId, enabled: item.enabled }
-        previous = entry.filterPresentation
-        changed = previous = invalid
-        if previous <> invalid then changed = previous.name <> rowPresentation.name or previous.description <> rowPresentation.description or previous.selected <> rowPresentation.selected or previous.enabled <> rowPresentation.enabled
-        if changed then entry.filterPresentation = rowPresentation
-        if item.id = focusedId then nextIndex = itemIndex
-    end for
-    ' Keep the same list and focused item during capability/acknowledgment updates.
-    if rebuild then m.nodes.list.content = content
-    if rebuild or initialSelection then m.nodes.list.jumpToItem = nextIndex
-    if initialSelection then m.catalog.initialized = true
+    if m.navigation.clear and not state.clearEnabled then m.navigation.clear = false
+    if firstItem = invalid and state.clearEnabled then m.navigation.clear = true
     m.nodes.status.text = state.message
+    m.nodes.clear.opacity = 1
+    if not state.clearEnabled then m.nodes.clear.opacity = 0.5
+    renderFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' focusedEntry
+'-------------------------------------------------------------------------------
+function focusedEntry() as dynamic
+    content = m.nodes.lists[m.navigation.column].content
+    if content = invalid then return invalid
+    return content.getChild(m.navigation.row)
+end function
+
+'-------------------------------------------------------------------------------
+' renderFocus
+'-------------------------------------------------------------------------------
+sub renderFocus()
+    ' One remote owner prevents list wrapping and keeps Clear navigation deterministic.
+    hasFocus = m.top.isInFocusChain()
+    for columnIndex = 0 to 2
+        list = m.nodes.lists[columnIndex]
+        content = list.content
+        if content <> invalid then
+            for itemIndex = 0 to content.getChildCount() - 1
+                entry = content.getChild(itemIndex)
+                rowState = entry.filterPresentation
+                focused = hasFocus and not m.navigation.clear and columnIndex = m.navigation.column and itemIndex = m.navigation.row
+                if rowState.focused <> focused then
+                    rowState.focused = focused
+                    entry.filterPresentation = rowState
+                end if
+            end for
+            if columnIndex = m.navigation.column and content.getChildCount() > 0 then
+                if list.itemFocused <> m.navigation.row then list.jumpToItem = m.navigation.row
+            end if
+        end if
+    end for
+    m.nodes.clear.hasFocusVisual = hasFocus and m.navigation.clear
 end sub
 
 '-------------------------------------------------------------------------------
 ' focusItems
 '-------------------------------------------------------------------------------
 sub focusItems()
-    m.nodes.list.setFocus(true)
+    m.top.setFocus(true)
+    renderFocus()
 end sub
 
 '-------------------------------------------------------------------------------
-' onFilterSelected
+' selectFilter
 '-------------------------------------------------------------------------------
-sub onFilterSelected()
-    entry = m.nodes.list.content.getChild(m.nodes.list.itemSelected)
-    if entry = invalid then return
-    if entry.filterPresentation.enabled then m.top.model.selectionRequested = entry.id
+sub selectFilter()
+    state = m.binding.presentation
+    if state = invalid then return
+    if m.navigation.clear then
+        if state.clearEnabled and state.noFilter <> invalid then m.binding.model.selectionRequested = state.noFilter.id
+    else
+        entry = focusedEntry()
+        if entry <> invalid then
+            if entry.filterPresentation.enabled then m.binding.model.selectionRequested = entry.id
+        end if
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
 ' onKeyEvent
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
-    if not press then return false
-    if key = Remote.Key.Back then return false
-    if key = Remote.Key.Options then m.top.model.refreshRequested = true
+    if not press or key = Remote.Key.Back then return false
+    if key = Remote.Key.Options then
+        m.binding.model.refreshRequested = true
+        return true
+    end if
+    if key = Remote.Key.OK or key = Remote.Key.Select then
+        selectFilter()
+        return true
+    end if
+    if m.binding.presentation = invalid then return true
+    if m.navigation.clear then
+        if key = Remote.Key.Up then m.navigation.clear = false
+    else
+        content = m.nodes.lists[m.navigation.column].content
+        if content = invalid then return true
+        if key = Remote.Key.Up and m.navigation.row > 0 then
+            m.navigation.row--
+        else if key = Remote.Key.Down then
+            if m.navigation.row + 1 < content.getChildCount() then
+                m.navigation.row++
+            else if m.binding.presentation.clearEnabled then
+                m.navigation.clear = true
+            end if
+        else if key = Remote.Key.Left or key = Remote.Key.Right then
+            stepDirection = 1
+            if key = Remote.Key.Left then stepDirection = -1
+            nextColumn = m.navigation.column + stepDirection
+            while nextColumn >= 0 and nextColumn < 3
+                nextContent = m.nodes.lists[nextColumn].content
+                if nextContent <> invalid then
+                    if nextContent.getChildCount() > 0 then
+                        m.navigation.column = nextColumn
+                        if m.navigation.row >= nextContent.getChildCount() then m.navigation.row = nextContent.getChildCount() - 1
+                        exit while
+                    end if
+                end if
+                nextColumn += stepDirection
+            end while
+        end if
+    end if
+    renderFocus()
     return true
 end function
 
@@ -103,5 +218,6 @@ end function
 ' cleanup
 '-------------------------------------------------------------------------------
 sub cleanup()
-    if m.top.model <> invalid then m.top.model.unobserveFieldScoped("presentation")
+    if m.binding.model <> invalid then m.binding.model.unobserveFieldScoped("presentation")
+    m.binding.model = invalid
 end sub

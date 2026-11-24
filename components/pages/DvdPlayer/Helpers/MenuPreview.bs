@@ -1,0 +1,197 @@
+'-------------------------------------------------------------------------------
+' startPreview
+'-------------------------------------------------------------------------------
+sub startPreview()
+    stopPreview()
+    if not m.loading.active or m.rendering.asset = invalid then return
+    m.nodes.status.text = ""
+    path = Strings.ToString(m.rendering.asset.previewLoop)
+    live = path <> ""
+    if not live then path = Strings.ToString(m.rendering.asset.previewVideo)
+    if path = "" then return
+    if live and m.rendering.previewFailures.DoesExist(path) then
+        if m.rendering.previewFailures[path].TotalMilliseconds() < 30000 then
+            path = Strings.ToString(m.rendering.asset.previewVideo)
+            live = false
+            if path = "" then return
+        end if
+        if live then m.rendering.previewFailures.Delete(path)
+    end if
+    try
+        m.rendering.preview = { covered: true, awaitingWrap: false, lastPosition: -1.0, playing: false, live: live, path: path }
+        media = menuMediaRequest(path, live)
+        video = m.rendering.previewHost.createChild("Video")
+        m.rendering.video = video
+        video.id = "menuPreview"
+        video.width = m.rendering.rect.width
+        video.height = m.rendering.rect.height
+        video.visible = true
+        video.enableUI = false
+        video.enableTrickPlay = false
+        video.mute = false
+        ' Only finite MP4s loop locally; live HLS repeats on the server.
+        video.loop = not live
+        video.notificationInterval = 0.1
+        agent = CreateObject("roHttpAgent")
+        agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        agent.AddHeader("Authorization", media.headers.Authorization)
+        video.setHttpAgent(agent)
+        content = JellyfinAuth.CreateContent(m.session.server, path, m.session.token, m.session.userId)
+        content.streamFormat = "mp4"
+        if live then content.streamFormat = "hls"
+        m.log.write("Preview start asset=" + Strings.ToString(m.rendering.asset.id) + " format=" + content.streamFormat + " clientLoop=" + Strings.ToString(video.loop))
+        video.content = content
+        video.observeField("state", "onPreviewState")
+        video.observeField("position", "onPreviewPosition")
+        timer = m.rendering.previewHost.createChild("Timer")
+        m.rendering.timer = timer
+        timer.duration = 20
+        ' Allow the server's 15-second startup deadline plus Roku buffering.
+        if live then timer.duration = 35
+        timer.repeat = false
+        timer.observeField("fire", "onPreviewTimeout")
+        timer.control = TimerControl.Command.Start
+        video.control = MediaControl.Command.Play
+    catch error
+        failPreview()
+    end try
+end sub
+
+'-------------------------------------------------------------------------------
+' failPreview
+'-------------------------------------------------------------------------------
+sub failPreview()
+    if m.rendering.preview <> invalid then
+        if m.rendering.preview.live = true then
+            ' No automatic retry; revisiting the menu must respect Retry-After: 30.
+            m.rendering.previewFailures[m.rendering.preview.path] = CreateObject("roTimespan")
+        end if
+    end if
+    stopPreview()
+    if m.loading.active and m.rendering.asset <> invalid then
+        if Strings.ToString(m.rendering.asset.previewLoop) <> "" and Strings.ToString(m.rendering.asset.previewVideo) <> "" then
+            m.rendering.asset.previewLoop = ""
+            startPreview()
+        else
+            m.nodes.status.text = "Preview unavailable. DVD menu controls remain available."
+        end if
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' stopPreview
+'-------------------------------------------------------------------------------
+sub stopPreview()
+    video = m.rendering.video
+    timer = m.rendering.timer
+    ' Revoke ownership before stopping: queued events must not affect a new screen.
+    m.rendering.video = invalid
+    m.rendering.timer = invalid
+    setPreviewCovered(true)
+    if timer <> invalid then
+        timer.unobserveField("fire")
+        timer.control = TimerControl.Command.Stop
+        m.rendering.previewHost.removeChild(timer)
+    end if
+    if video <> invalid then
+        m.log.write("Preview stop")
+        video.unobserveField("state")
+        video.unobserveField("position")
+        video.control = MediaControl.Command.Stop
+        video.content = invalid
+        m.rendering.previewHost.removeChild(video)
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewState
+'-------------------------------------------------------------------------------
+sub onPreviewState(event as object)
+    if not m.loading.active or m.rendering.video = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.video) then return
+    state = event.getData()
+    m.log.write("Preview state=" + Strings.ToString(state) + " live=" + Strings.ToString(m.rendering.preview.live) + " position=" + Strings.ToString(m.rendering.video.position) + " duration=" + Strings.ToString(m.rendering.video.duration))
+    if state = VideoPlayerState.Value.Error then
+        details = "Preview errorCode=" + Strings.ToString(m.rendering.video.errorCode) + " errorMsg=" + Strings.ToString(m.rendering.video.errorMsg) + " errorStr=" + Strings.ToString(m.rendering.video.errorStr)
+        token = Strings.ToString(m.session.token)
+        if token <> "" then details = details.Replace(token, "[redacted]")
+        m.log.write(details)
+    end if
+    if state = VideoPlayerState.Value.Playing then
+        m.rendering.preview.playing = true
+    else if state = VideoPlayerState.Value.Buffering or state = VideoPlayerState.Value.Finished then
+        if state = VideoPlayerState.Value.Finished and m.rendering.preview.live = true then
+            failPreview()
+            return
+        end if
+        m.rendering.preview.playing = false
+        if state = VideoPlayerState.Value.Finished then m.rendering.preview.awaitingWrap = true
+        setPreviewCovered(true)
+    else if state = VideoPlayerState.Value.Error then
+        failPreview()
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewPosition
+'-------------------------------------------------------------------------------
+sub onPreviewPosition(event as object)
+    if not m.loading.active or m.rendering.video = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.video) then return
+    updatePreviewPosition(Number.ToFloat(event.getData(), -1), Number.ToFloat(m.rendering.video.duration, 0))
+end sub
+
+'-------------------------------------------------------------------------------
+' updatePreviewPosition
+'-------------------------------------------------------------------------------
+sub updatePreviewPosition(position as float, duration as float)
+    if position < 0 then return
+    previous = m.rendering.preview.lastPosition
+    m.rendering.preview.lastPosition = position
+    if m.rendering.preview.live = true then
+        ' Live duration describes a moving window, not an approaching loop boundary.
+        if m.rendering.preview.playing and previous >= 0 and position > previous then setPreviewCovered(false)
+        return
+    end if
+    lead = 0.75
+    if duration > 0 and duration < 3 then lead = duration / 4
+    if duration > 0 and position >= duration - lead then
+        ' Cover before EOF: native loops need not publish an intervening state.
+        m.rendering.preview.awaitingWrap = true
+        setPreviewCovered(true)
+        return
+    end if
+    if m.rendering.preview.awaitingWrap then
+        if previous >= 0 and position < previous then m.rendering.preview.awaitingWrap = false
+        return
+    end if
+    ' A playing state alone can precede usable video. Wait for forward progress.
+    if m.rendering.preview.playing and previous >= 0 and position > previous and position >= 0.15 then setPreviewCovered(false)
+end sub
+
+'-------------------------------------------------------------------------------
+' setPreviewCovered
+'-------------------------------------------------------------------------------
+sub setPreviewCovered(covered as boolean)
+    if m.rendering.image <> invalid then m.rendering.image.visible = covered
+    if m.rendering.preview = invalid then return
+    changed = m.rendering.preview.covered <> covered
+    m.rendering.preview.covered = covered
+    if changed then m.log.write("Preview cover=" + Strings.ToString(covered) + " live=" + Strings.ToString(m.rendering.preview.live) + " awaitingWrap=" + Strings.ToString(m.rendering.preview.awaitingWrap) + " position=" + Strings.ToString(m.rendering.preview.lastPosition))
+    if m.rendering.timer = invalid then return
+    if covered then
+        if changed then m.rendering.timer.control = TimerControl.Command.Start
+    else
+        m.rendering.timer.control = TimerControl.Command.Stop
+    end if
+end sub
+
+'-------------------------------------------------------------------------------
+' onPreviewTimeout
+'-------------------------------------------------------------------------------
+sub onPreviewTimeout(event as object)
+    if m.rendering.timer = invalid then return
+    if not event.getRoSGNode().isSameNode(m.rendering.timer) then return
+    m.log.write("Preview covered timeout")
+    failPreview()
+end sub

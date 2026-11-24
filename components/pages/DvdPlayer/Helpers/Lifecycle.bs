@@ -1,0 +1,99 @@
+'-------------------------------------------------------------------------------
+' deactivate
+'-------------------------------------------------------------------------------
+sub deactivate()
+    m.loading.active = false
+    releaseSessionResources()
+    m.top.visible = false
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseTask
+'-------------------------------------------------------------------------------
+sub releaseTask()
+    task = m.loading.task
+    m.loading.task = invalid
+    if task = invalid then return
+    task.unobserveField("response")
+    task.control = TaskControl.Command.Stop
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' abandonSession
+'-------------------------------------------------------------------------------
+sub abandonSession()
+    dismissFilterPicker()
+    m.nodes.filterTimer.control = TimerControl.Command.Stop
+    releaseFiltersTask()
+    m.filters.discovery = { failed: false, retries: 0, retryKind: "" }
+    m.filters.capability = DvdFilter.Capability.Unavailable
+    m.filters.categories = []
+    m.filters.noFilter = invalid
+    hideFilterHint()
+    m.presentation.filterHint.shown = false
+    m.filters.waitingId = ""
+    m.filters.busy = false
+    m.filters.notice = ""
+    reconcileBlockingPresentation()
+    m.filters.selectedId = DvdFilter.None
+    task = m.native.task
+    m.native.task = invalid
+    m.native.queue = []
+    m.native.inFlight = invalid
+    if task = invalid then return
+    task.unobserveField("response")
+    if task.finalCommand = invalid then task.finalCommand = finalPositionCommand(DvdSession.Action.Stop)
+    task.cancelRequested = true
+    ' Leave the worker running so a late POST is followed by DELETE.
+    m.top.removeChild(task)
+end sub
+
+'-------------------------------------------------------------------------------
+' showFailure
+'-------------------------------------------------------------------------------
+sub showFailure(message as string)
+    releaseSessionResources()
+    m.loading.failed = true
+    m.nodes.contentHost.visible = false
+    m.nodes.host.visible = false
+    m.presentation.loading = false
+    m.nodes.status.text = message + Chr(10) + "Press OK to restart the DVD or Back to leave."
+    restorePlayerFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' finalPositionCommand
+'-------------------------------------------------------------------------------
+function finalPositionCommand(action as string) as dynamic
+    if m.playback.video = invalid or not m.playback.started or m.playback.completed then return invalid
+    if m.playback.id = "" then return invalid
+    positionSeconds = Number.ToFloat(m.playback.video.position, -1)
+    if positionSeconds < 0 then return invalid
+    return { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: action, playbackId: m.playback.id, positionSeconds: positionSeconds }
+end function
+
+'-------------------------------------------------------------------------------
+' closeDvdSession
+'-------------------------------------------------------------------------------
+sub closeDvdSession()
+    if m.resume.closing then return
+    m.resume.closing = true
+    releaseSessionResources()
+    m.top.closeRequested = true
+end sub
+
+'-------------------------------------------------------------------------------
+' releaseSessionResources
+'-------------------------------------------------------------------------------
+sub releaseSessionResources()
+    hideControls()
+    ' Capture final progress and detach the session task before discarding Video.
+    ' The worker owns stop/DELETE and completion signaling after page removal.
+    abandonSession()
+    releaseTask()
+    clearMenu()
+    releaseContentVideo()
+    m.presentation.loading = false
+    reconcileBlockingPresentation()
+end sub
