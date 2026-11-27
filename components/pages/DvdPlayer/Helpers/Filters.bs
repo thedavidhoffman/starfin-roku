@@ -108,15 +108,22 @@ sub onFiltersResponse(event as object)
     response = event.getData()
     if response.requestId <> m.filters.serial then return
     releaseFiltersTask()
+    if response.authExpired = true then
+        requestAuthentication(response)
+        return
+    end if
     data = response.data
-    if response.ok and type(data) = "roAssociativeArray" then
+    loaded = response.ok and type(data) = "roAssociativeArray"
+    if loaded and response.kind = DvdFilter.Request.Catalog then
+        try
+            loaded = readFilterCatalog(data)
+        catch error
+            loaded = false
+        end try
+    end if
+    if loaded then
         m.filters.discovery = { failed: false, retries: 0, retryKind: "" }
         m.filters.error = ""
-        if response.kind = DvdFilter.Request.Catalog then
-            if not readFilterCatalog(data) then
-                m.filters.error = "Unable to load filter categories. Press Options to retry."
-            end if
-        end if
         m.filters.capability = DvdFilter.Capability.Unavailable
         m.filters.message = "Video filters are unavailable."
         if type(data.capabilities) = "roAssociativeArray" then

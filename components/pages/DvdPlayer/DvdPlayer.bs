@@ -136,6 +136,10 @@ sub onDemoResponse(event as object)
     response = event.getData()
     if response.requestId <> m.loading.generation then return
     releaseTask()
+    if response.authExpired = true then
+        requestAuthentication(response)
+        return
+    end if
     if response.ok <> true then
         showFailure(Strings.ToString(response.errorMessage, "Unable to load the DVD."))
         return
@@ -169,6 +173,10 @@ sub onSessionResponse(event as object)
         m.native.task = invalid
         task.unobserveField("response")
         m.top.removeChild(task)
+        if response.authExpired = true then
+            requestAuthentication(response)
+            return
+        end if
         if m.resume.closing then
             m.top.closeRequested = true
         else if response.errorCode = "resume-unavailable" then
@@ -386,7 +394,9 @@ function onKeyEvent(key as string, press as boolean) as boolean
             return true
         end if
         if not m.loading.failed and (m.native.state = DvdSession.State.Playing or m.native.state = DvdSession.State.AwaitingCompletion or m.native.state = DvdSession.State.Still) then
-            requestLastMenu()
+            if m.native.inFlight <> invalid or m.native.queue.Count() > 0 or m.native.navigating then return true
+            availability = transportAvailability()
+            if availability.canReturn then requestLastMenu() else closeDvdSession()
             return true
         end if
         closeDvdSession()

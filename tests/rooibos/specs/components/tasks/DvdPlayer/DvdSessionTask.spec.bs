@@ -1,7 +1,7 @@
 namespace tests
 
     @SGNode("DvdSessionTask")
-    @suite("DVD session timeline refresh")
+    @suite("DVD session recovery and timeline refresh")
     class DvdSessionTaskTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
@@ -25,6 +25,78 @@ namespace tests
                     { outputStartSeconds: 0, outputEndSeconds: coverageEnd, titleStartSeconds: 0, titleEndSeconds: coverageEnd }
                 ] } } }
             }
+        end function
+
+        @describe("uncertain filter delivery")
+
+        @it("expires unconfirmed delivery after its recovery window")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.pendingFilter = { requestId: "dddddddd-dddd-dddd-dddd-dddddddddddd", admitted: false, deadlineMs: 1000, expired: false }
+
+            'bs:disable-next-line 1140
+            reconcilePendingFilter()
+
+            m.assertTrue(m.node.native.pendingFilter.expired)
+            m.assertInvalid(m.top.response)
+        end function
+
+        @it("does not expire a matching admitted pending command")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            requestId = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+            m.node.native.pendingFilter = { requestId: requestId, admitted: false, deadlineMs: 0, expired: false }
+            m.node.native.snapshot.filterChange = { requestId: requestId, state: "pending" }
+
+            'bs:disable-next-line 1140
+            reconcilePendingFilter()
+
+            m.assertTrue(m.node.native.pendingFilter.admitted)
+            m.assertFalse(m.node.native.pendingFilter.expired)
+        end function
+
+        @it("publishes matching acceptance and clears the pending request")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            requestId = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+            m.node.native.pendingFilter = { requestId: requestId, admitted: false, deadlineMs: 30000, expired: false }
+            m.node.native.snapshot.filterChange = { requestId: requestId, state: "accepted" }
+
+            'bs:disable-next-line 1140
+            reconcilePendingFilter()
+
+            m.assertInvalid(m.node.native.pendingFilter)
+            m.assertTrue(m.top.response.ok)
+            m.assertEqual(m.top.response.commandId, requestId)
+        end function
+
+        @it("publishes a matching late rejection with its backend message")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            requestId = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+            m.node.native.pendingFilter = { requestId: requestId, admitted: false, deadlineMs: 30000, expired: false }
+            m.node.native.snapshot.filterChange = { requestId: requestId, state: "rejected", message: "Checkpoint unavailable" }
+
+            'bs:disable-next-line 1140
+            reconcilePendingFilter()
+
+            m.assertInvalid(m.node.native.pendingFilter)
+            m.assertFalse(m.top.response.ok)
+            m.assertEqual(m.top.response.message, "Checkpoint unavailable")
+        end function
+
+        @it("does not mistake another request's result for acceptance")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.pendingFilter = { requestId: "dddddddd-dddd-dddd-dddd-dddddddddddd", admitted: false, deadlineMs: 30000, expired: false }
+            m.node.native.snapshot.filterChange = { requestId: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", state: "accepted" }
+
+            'bs:disable-next-line 1140
+            reconcilePendingFilter()
+
+            m.assertFalse(m.node.native.pendingFilter.admitted)
+            m.assertFalse(m.node.native.pendingFilter.expired)
+            m.assertInvalid(m.top.response)
         end function
 
         @describe("fresh coverage at the current navigation revision")

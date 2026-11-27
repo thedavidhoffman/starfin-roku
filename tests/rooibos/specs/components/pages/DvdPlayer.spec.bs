@@ -1,14 +1,23 @@
 namespace tests
 
     @SGNode("DvdPlayer")
-    @suite("DVD menu proof of concept")
+    @suite("DVD native playback")
     class DvdPlayerTests extends rooibos.BaseTestSuite
 
         protected override function beforeEach()
             m.top.callFunc("deactivate")
             m.node.session = { server: "http://server/jellyfin", token: "test-token", userId: "user" }
             m.node.loading.active = true
-            m.node.menu = { manifest: m.fixture(), screen: "", title: 6, chapter: 1, featureAudio: 1, audio: 1, subtitles: false, infoText: false, history: [], focused: 0 }
+            m.node.menu = { manifest: { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }, focused: 0 }
+            m.node.resume.closing = false
+            m.node.resume.prompting = false
+            m.node.loading.failed = false
+            m.node.native.navigating = false
+            m.node.native.state = ""
+            m.node.native.snapshot = invalid
+            m.node.native.revision = -1
+            m.top.closeRequested = false
+            m.top.authenticationRequired = invalid
             'bs:disable-next-line 1001
             m.stubCall(menuMediaRequest, { url: "pkg:/images/channel-fhd.png", headers: { Authorization: "MediaBrowser Token=test" } })
         end function
@@ -17,26 +26,106 @@ namespace tests
             m.top.callFunc("deactivate")
         end function
 
-        function fixture() as object
-            buttons = [
-                { number: 1, group: 1, x: 360, y: 120, width: 180, height: 48, right: 2, down: 2, left: 99, up: 2 }
-                { number: 2, group: 1, x: 360, y: 180, width: 180, height: 48, left: 1, up: 1, right: 1, down: 1 }
-                { number: 3, group: 2, x: 0, y: 0, width: 10, height: 10 }
-            ]
-            asset = { id: "menu", titleSet: 2, image: "Starfin/Dvd/Demos/robots-of-death-special-edition/Assets/menu.jpg", navigation: [{ forcedSelect: 2, buttons: buttons }] }
-            chapters = [{ number: 1, pgc: 1, program: 1, startSecondsInPgc: 0 }, { number: 2, pgc: 1, program: 2, startSecondsInPgc: 60 }]
-            titleSet = { number: 2, menuVideo: { width: 720, height: 480, aspectRatio: "4:3" }, audio: [{ number: 1 }, { number: 2 }], programChains: [{ number: 1, audioMappings: [{ trackNumber: 1 }, { trackNumber: 2 }] }] }
-            extraSet = { number: 3, audio: [{ number: 1 }], programChains: [{ number: 1, audioMappings: [{ trackNumber: 1 }] }] }
-            screens = {
-                home: { assetId: "menu", buttons: { "1": { action: "select", title: 6, chapter: 2 }, "2": { action: "navigate", screen: "subtitles" } } }
-                "subtitles-off": { assetId: "menu", buttons: { "1": { action: "subtitles", enabled: true }, "2": { action: "navigate", screen: "home" } } }
-                "subtitles-on": { assetId: "menu", buttons: { "1": { action: "subtitles", enabled: false }, "2": { action: "navigate", screen: "home" } } }
-                audio1: { assetId: "menu", buttons: { "1": { action: "audio", track: 2 }, "2": { action: "resume" } } }
-                audio2: { assetId: "menu", buttons: { "1": { action: "audio", track: 1 }, "2": { action: "resume" } } }
-                "extras2-off": { assetId: "menu", buttons: { "1": { action: "infoText", enabled: true }, "2": { action: "navigate", screen: "home" } } }
-                "extras2-on": { assetId: "menu", buttons: { "1": { action: "infoText", enabled: false }, "2": { action: "navigate", screen: "home" } } }
-            }
-            return { initialScreen: "home", disc: { ifoSha256: "fixture", menuAssets: [asset], titleSets: [titleSet, extraSet], titles: [{ number: 6, titleSet: 2, titleWithinSet: 5, pgcs: [1], chapters: chapters }, { number: 7, titleSet: 3, titleWithinSet: 1, pgcs: [1], chapters: chapters }], reviewedInterpretation: { episodes: [], specialFeatures: [] } }, menuMap: { screens: screens } }
+        @describe("native recovery")
+
+        function responseEvent(source as object, data as object) as object
+            return { source: source, data: data, getRoSGNode: function()
+                return m.source
+            end function, getData: function()
+                return m.data
+            end function }
+        end function
+
+        @it("Back exits content when no previous menu is available")
+        function _()
+            m.node.native.state = "playing"
+            m.node.native.snapshot = { state: "playing", capabilities: { returnToLastMenu: true }, transport: { canReturnToLastMenu: false } }
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertTrue(m.top.closeRequested)
+        end function
+
+        @it("Back preserves the session while a command is pending")
+        function _()
+            m.node.native.state = "playing"
+            m.node.native.inFlight = { action: "progress" }
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertFalse(m.top.closeRequested)
+        end function
+
+        @it("Back returns to the last menu when supported")
+        function _()
+            task = m.top.createChild("DvdSessionTask")
+            m.node.native.task = task
+            m.node.native.state = "playing"
+            m.node.native.snapshot = { state: "playing", capabilities: { returnToLastMenu: true }, transport: { canReturnToLastMenu: true } }
+
+            'bs:disable-next-line 1140
+            onKeyEvent("back", true)
+
+            m.assertFalse(m.top.closeRequested)
+            m.assertEqual(task.command.action, "returnToLastMenu")
+        end function
+
+        @it("expired manifest authentication requests shell recovery")
+        function _()
+            task = m.top.createChild("DvdDemoTask")
+            m.node.loading.task = task
+            event = m.responseEvent(task, { requestId: m.node.loading.generation, ok: false, authExpired: true })
+
+            'bs:disable-next-line 1140
+            onDemoResponse(event)
+
+            m.assertTrue(m.top.authenticationRequired.response.authExpired)
+            m.assertEqual(m.top.authenticationRequired.request.token, "test-token")
+            m.assertFalse(m.node.loading.active)
+        end function
+
+        @it("expired native session authentication requests shell recovery")
+        function _()
+            task = m.top.createChild("DvdSessionTask")
+            m.node.native.task = task
+            event = m.responseEvent(task, { requestId: m.node.native.requestId, action: "closed", authExpired: true })
+
+            'bs:disable-next-line 1140
+            onSessionResponse(event)
+
+            m.assertTrue(m.top.authenticationRequired.response.authExpired)
+            m.assertFalse(m.node.loading.active)
+        end function
+
+        @it("expired filter authentication requests shell recovery")
+        function _()
+            task = m.top.createChild("DvdFiltersTask")
+            m.node.filters.task = task
+            event = m.responseEvent(task, { requestId: m.node.filters.serial, kind: "catalog", ok: false, authExpired: true })
+
+            'bs:disable-next-line 1140
+            onFiltersResponse(event)
+
+            m.assertTrue(m.top.authenticationRequired.response.authExpired)
+            m.assertFalse(m.node.loading.active)
+        end function
+
+        @it("a rejected catalog uses the load failure path despite available capability")
+        function _()
+            task = m.top.createChild("DvdFiltersTask")
+            m.node.filters.task = task
+            m.node.filters.capability = "available"
+            event = m.responseEvent(task, { requestId: m.node.filters.serial, kind: "catalog", ok: true, status: 200, data: { capabilities: { videoFilters: { state: "available" } } } })
+
+            'bs:disable-next-line 1140
+            onFiltersResponse(event)
+
+            m.assertTrue(m.node.filters.discovery.failed)
+            m.assertEqual(m.node.filters.discovery.retryKind, "")
+            'bs:disable-next-line 1140
+            m.assertFalse(filterEntryVisible())
         end function
 
         @describe("initial DVD loading artwork")
@@ -265,6 +354,50 @@ namespace tests
             m.assertFalse(m.node.nodes.menuStartupCover.visible)
         end function
 
+        @describe("native menu navigation")
+
+        @it("moves normal focus locally without submitting a command")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            snapshot.menu.buttons[0].right = 2
+            snapshot.menu.buttons.Push({ id: 2, x: 220, y: 100, width: 100, height: 40, left: 1 })
+            'bs:disable-next-line 1140
+            startPreview()
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            task = m.top.createChild("DvdSessionTask")
+            m.node.native.task = task
+            background = m.node.rendering.root
+
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+
+            m.assertEqual(m.node.menu.focused, 2)
+            m.assertInvalid(task.command)
+            m.assertTrue(m.node.rendering.root.isSameNode(background))
+        end function
+
+        @it("submits auto-action selection with current revision and no rectangle")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            snapshot.menu.buttons[0].right = 2
+            snapshot.menu.buttons.Push({ id: 2, x: 220, y: 100, width: 21, height: 21, autoAction: true })
+            'bs:disable-next-line 1140
+            startPreview()
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            task = m.top.createChild("DvdSessionTask")
+            m.node.native.task = task
+
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+
+            m.assertEqual(task.command.action, "button")
+            m.assertEqual(task.command.button, 2)
+            m.assertEqual(task.command.revision, 7)
+            m.assertFalse(m.node.rendering.buttons["2"].getChild(0).visible)
+        end function
+
         @describe("measured DVD title progress")
 
         function measuredSnapshot() as object
@@ -456,503 +589,6 @@ namespace tests
 
             'bs:disable-next-line 1140
             m.assertEqual(measuredTitlePosition(ranges, 1.5, 200), invalid)
-        end function
-
-        @describe("geometry and focus")
-
-        @it("fits anamorphic source coordinates into the centered 4:3 display")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home")
-
-            m.assertEqual(m.node.rendering.rect.x, 240)
-            m.assertEqual(m.node.rendering.rect.width, 1440)
-            m.assertEqual(m.node.rendering.buttons["1"].translation, [720, 270])
-            m.assertEqual(m.node.rendering.buttons["1"].getChild(0).getChild(0).width, 360)
-            m.assertEqual(m.node.rendering.buttons.Count(), 2)
-            m.assertEqual(m.node.menu.focused, 2)
-        end function
-
-        @it("fits 16:9 into a 720p viewport without letterboxing")
-        function _()
-            'bs:disable-next-line 1140
-            rect = fitMenuRect({ width: 720, height: 480, aspectRatio: "16:9" }, 1280, 720)
-
-            m.assertEqual(rect.width, 1280)
-            m.assertEqual(rect.height, 720)
-            m.assertEqual(rect.x, 0)
-        end function
-
-        @it("follows the mapped neighbor and highlights its hotspot")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("right", true)
-
-            m.assertEqual(m.node.menu.focused, 2)
-            m.assertTrue(m.node.rendering.buttons["2"].hasFocus())
-            m.assertTrue(m.node.rendering.buttons["2"].getChild(0).visible)
-            m.assertFalse(m.node.rendering.buttons["1"].getChild(0).visible)
-        end function
-
-        @it("ignores an unavailable directional target")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("left", true)
-
-            m.assertEqual(m.node.menu.focused, 1)
-        end function
-
-        @describe("menu actions and state")
-
-        @it("OK opens the mapped submenu")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 2)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("OK", true)
-
-            m.assertEqual(m.node.menu.screen, "subtitles-off")
-            m.assertEqual(m.node.menu.history, ["home"])
-        end function
-
-        @it("subtitle toggles change artwork without pushing history")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("subtitles", 1)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("OK", true)
-
-            m.assertTrue(m.node.menu.subtitles)
-            m.assertEqual(m.node.menu.screen, "subtitles-on")
-            m.assertEqual(m.node.menu.history.Count(), 0)
-            m.assertEqual(m.node.menu.focused, 1)
-        end function
-
-        @it("Back resolves historical toggle screens against current intent")
-        function _()
-            m.node.menu.history = ["subtitles-off"]
-            m.node.menu.subtitles = true
-            'bs:disable-next-line 1140
-            goScreen("home", 1, false)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("back", true)
-
-            m.assertEqual(m.node.menu.screen, "subtitles-on")
-        end function
-
-        @it("Back from the root requests closure")
-        function _()
-            m.top.closeRequested = false
-            'bs:disable-next-line 1140
-            goScreen("home")
-
-            'bs:disable-next-line 1140
-            onKeyEvent("back", true)
-
-            m.assertTrue(m.top.closeRequested)
-        end function
-
-        @it("extras retain their own audio while preserving feature preference")
-        function _()
-            m.node.menu.featureAudio = 2
-            'bs:disable-next-line 1140
-            m.assertTrue(selectTitle(7, 1))
-
-            m.assertEqual(m.node.menu.audio, 1)
-            m.assertEqual(m.node.menu.featureAudio, 2)
-
-            'bs:disable-next-line 1140
-            selectTitle(6, 1)
-
-            m.assertEqual(m.node.menu.audio, 2)
-        end function
-
-        @it("unavailable preferred audio falls back to the first declared track")
-        function _()
-            m.node.menu.featureAudio = 3
-
-            'bs:disable-next-line 1140
-            selectTitle(6, 1)
-
-            m.assertEqual(m.node.menu.audio, 1)
-            m.assertEqual(m.node.menu.featureAudio, 3)
-        end function
-
-        @it("invalid chapters do not change the selected title")
-        function _()
-            'bs:disable-next-line 1140
-            m.assertFalse(selectTitle(7, 99))
-
-            m.assertEqual(m.node.menu.title, 6)
-            m.assertEqual(m.node.menu.chapter, 1)
-        end function
-
-        @it("selection payload preserves unresolved subtitle intent and chapter mapping")
-        function _()
-            m.node.menu.subtitles = true
-            m.node.menu.infoText = true
-            'bs:disable-next-line 1140
-            selectTitle(6, 2)
-
-            'bs:disable-next-line 1140
-            request = selectionRequest()
-
-            m.assertEqual(request.schemaVersion, "starfin-dvd-selection/0.2-preview")
-            m.assertEqual(request.chapterNumber, 2)
-            m.assertEqual(request.program, 2)
-            m.assertEqual(request.approximateStartSecondsInPgc, 60)
-            m.assertInvalid(request.subtitleTrackNumber)
-            m.assertEqual(request.subtitleMappingStatus, "unresolved")
-            m.assertTrue(request.requestedInfoTextEnabled)
-            m.assertEqual(request.mode, "preview-only")
-        end function
-
-        @it("content selection displays the playback-unavailable acknowledgment")
-        function _()
-            m.stubCall(AppMessage.Show, sub(message, title)
-                getGlobalAa().dvdMessage = message
-            end sub)
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-
-            'bs:disable-next-line 1140
-            onKeyEvent("OK", true)
-
-            m.assertEqual(m.node.rendering.selection.chapterNumber, 2)
-            m.assertTrue(Instr(1, getGlobalAa().dvdMessage, "Playback unavailable") > 0)
-            m.assertTrue(m.node.rendering.awaitingMessage)
-        end function
-
-        @describe("asynchronous lifecycle")
-
-        @it("a fresh page accepts session data assigned before activation")
-        function _()
-            page = m.top.createChild("DvdPlayer")
-            page.loadRequest = { server: "http://server/base", token: "fixture-token", userId: "fixture-user" }
-
-            page.callFunc("activate")
-            request = page.taskCreated.request
-            page.callFunc("deactivate")
-            m.top.removeChild(page)
-
-            m.assertEqual(request.server, "http://server/base")
-            m.assertEqual(request.token, "fixture-token")
-            m.assertEqual(request.userId, "fixture-user")
-            m.assertEqual(request.requestId, 1)
-        end function
-
-        @it("an accepted manifest resets selection and opens the initial screen")
-        function _()
-            getGlobalAa().dvdManifest = m.fixture()
-            m.node.menu.subtitles = true
-            m.node.menu.featureAudio = 2
-            AsyncLifecycle.Begin(m.node.loading.lifecycle, 5)
-            event = { getData: function()
-                return { requestId: 5, action: "dvdDemoLoad", ok: true, payload: getGlobalAa().dvdManifest }
-            end function }
-
-            'bs:disable-next-line 1140
-            onDemoResponse(event)
-
-            m.assertEqual(m.node.menu.screen, "home")
-            m.assertEqual(m.node.menu.title, 6)
-            m.assertEqual(m.node.menu.chapter, 1)
-            m.assertEqual(m.node.menu.featureAudio, 1)
-            m.assertFalse(m.node.menu.subtitles)
-            m.assertEqual(m.node.loading.phase, "ready")
-        end function
-
-        @it("preview errors leave the original artwork and focused hotspot intact")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            event = { getData: function()
-                return "error"
-            end function, getRoSGNode: function()
-                return getGlobalAa().dvdPreviewNode
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewState(event)
-
-            m.assertInvalid(m.node.rendering.video)
-            m.assertNotInvalid(m.node.rendering.image)
-            m.assertTrue(m.node.rendering.image.visible)
-            m.assertTrue(m.node.rendering.buttons["1"].hasFocus())
-        end function
-
-        @it("a preview timeout removes only the preview")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            getGlobalAa().dvdPreviewTimer = m.node.rendering.timer
-            event = { getRoSGNode: function()
-                return getGlobalAa().dvdPreviewTimer
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewTimeout(event)
-
-            m.assertInvalid(m.node.rendering.video)
-            m.assertInvalid(m.node.rendering.timer)
-            m.assertEqual(m.node.loading.phase, "ready")
-        end function
-
-        @it("a playing notification alone keeps the still until position advances")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            event = { getData: function()
-                return "playing"
-            end function, getRoSGNode: function()
-                return getGlobalAa().dvdPreviewNode
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewState(event)
-
-            m.assertTrue(m.node.rendering.video.visible)
-            m.assertTrue(m.node.rendering.image.visible)
-            m.assertTrue(m.node.rendering.buttons["1"].hasFocus())
-        end function
-
-        @it("preview startup enables native looping")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.node.rendering.asset.previewVideo = "Starfin/Dvd/Demos/robots-of-death-special-edition/Assets/menu.mp4"
-            content = CreateObject("roSGNode", "ContentNode")
-            m.stubCall(JellyfinAuth.CreateContent, content)
-
-            'bs:disable-next-line 1140
-            startPreview()
-
-            m.assertNotInvalid(m.node.rendering.video)
-            m.assertTrue(m.node.rendering.video.loop)
-            m.assertTrue(m.node.rendering.video.mute)
-        end function
-
-        @it("loop completion retains the player and content while showing the still")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            video = m.node.rendering.video
-            timer = m.node.rendering.timer
-            content = CreateObject("roSGNode", "ContentNode")
-            video.content = content
-            m.node.rendering.image.visible = false
-            event = { getData: function()
-                return "finished"
-            end function, getRoSGNode: function()
-                return getGlobalAa().dvdPreviewNode
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewState(event)
-
-            m.assertTrue(m.node.rendering.video.isSameNode(video))
-            m.assertTrue(m.node.rendering.video.content.isSameNode(content))
-            m.assertTrue(m.node.rendering.timer.isSameNode(timer))
-            m.assertTrue(m.node.rendering.image.visible)
-            m.assertTrue(video.visible)
-            m.assertTrue(m.node.rendering.buttons["1"].hasFocus())
-        end function
-
-        @it("loop buffering retains the player and displays the still")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            video = m.node.rendering.video
-            m.node.rendering.image.visible = false
-            event = { getData: function()
-                return "buffering"
-            end function, getRoSGNode: function()
-                return getGlobalAa().dvdPreviewNode
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewState(event)
-
-            m.assertTrue(m.node.rendering.video.isSameNode(video))
-            m.assertTrue(m.node.rendering.image.visible)
-            m.assertTrue(video.visible)
-        end function
-
-        @it("the still is layered above the preview and below the hotspots")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-
-            m.assertEqual(m.node.rendering.root.getChild(0).id, "previewHost")
-            m.assertEqual(m.node.rendering.root.getChild(1).id, "menuImage")
-            m.assertEqual(m.node.rendering.root.getChild(2).id, "hotspots")
-        end function
-
-        @it("forward playback progress uncovers the preview")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            m.node.rendering.preview.playing = true
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0, 12)
-
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0.2, 12)
-
-            m.assertFalse(m.node.rendering.image.visible)
-            m.assertFalse(m.node.rendering.preview.covered)
-        end function
-
-        @it("the still covers EOF without a buffering or finished notification")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            m.node.rendering.preview.playing = true
-            'bs:disable-next-line 1140
-            updatePreviewPosition(10, 12)
-            'bs:disable-next-line 1140
-            updatePreviewPosition(10.2, 12)
-
-            'bs:disable-next-line 1140
-            updatePreviewPosition(11.3, 12)
-
-            m.assertTrue(m.node.rendering.image.visible)
-            m.assertTrue(m.node.rendering.preview.awaitingWrap)
-            m.assertTrue(m.node.rendering.buttons["1"].hasFocus())
-        end function
-
-        @it("a native loop stays covered until position wraps and then advances")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            m.node.rendering.preview.playing = true
-            'bs:disable-next-line 1140
-            updatePreviewPosition(11.3, 12)
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0, 12)
-            m.assertTrue(m.node.rendering.image.visible)
-
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0.2, 12)
-
-            m.assertFalse(m.node.rendering.image.visible)
-            m.assertFalse(m.node.rendering.preview.awaitingWrap)
-            m.assertTrue(m.node.rendering.video.isSameNode(getGlobalAa().dvdPreviewNode))
-        end function
-
-        @it("repeated position notifications do not uncover the still")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            m.node.rendering.preview.playing = true
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0.2, 12)
-
-            'bs:disable-next-line 1140
-            updatePreviewPosition(0.2, 12)
-
-            m.assertTrue(m.node.rendering.image.visible)
-        end function
-
-        @it("an obsolete preview cannot stop the current screen's video")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.installPreview()
-            getGlobalAa().dvdOldPreview = CreateObject("roSGNode", "Video")
-            event = { getData: function()
-                return "error"
-            end function, getRoSGNode: function()
-                return getGlobalAa().dvdOldPreview
-            end function }
-
-            'bs:disable-next-line 1140
-            onPreviewState(event)
-
-            m.assertNotInvalid(m.node.rendering.video)
-        end function
-
-        @it("acknowledgment focus return releases the modal guard and retains hotspot focus")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            m.node.rendering.awaitingMessage = true
-            m.node.rendering.lostFocus = true
-
-            'bs:disable-next-line 1140
-            onFocusChanged()
-
-            m.assertFalse(m.node.rendering.awaitingMessage)
-            m.assertTrue(m.node.rendering.buttons["1"].hasFocus())
-        end function
-
-        @it("a current failed request shows a retryable error")
-        function _()
-            AsyncLifecycle.Begin(m.node.loading.lifecycle, 5)
-            event = { getData: function()
-                return { requestId: 5, action: "dvdDemoLoad", ok: false, errorMessage: "Unavailable" }
-            end function }
-
-            'bs:disable-next-line 1140
-            onDemoResponse(event)
-
-            m.assertEqual(m.node.loading.phase, "failed")
-            m.assertTrue(Instr(1, m.top.findNode("status").text, "OK to retry") > 0)
-        end function
-
-        @it("stale request generations cannot replace the active menu")
-        function _()
-            AsyncLifecycle.Begin(m.node.loading.lifecycle, 5)
-            'bs:disable-next-line 1140
-            goScreen("home", 1)
-            event = { getData: function()
-                return { requestId: 4, action: "dvdDemoLoad", ok: false, errorMessage: "old failure" }
-            end function }
-
-            'bs:disable-next-line 1140
-            onDemoResponse(event)
-
-            m.assertEqual(m.node.loading.phase, "ready")
-            m.assertEqual(m.node.menu.screen, "home")
-        end function
-
-        @it("deactivation removes rendered nodes and revokes request ownership")
-        function _()
-            'bs:disable-next-line 1140
-            goScreen("home")
-            AsyncLifecycle.Begin(m.node.loading.lifecycle, 5)
-
-            m.top.callFunc("deactivate")
-
-            m.assertEqual(m.top.findNode("menuHost").getChildCount(), 0)
-            m.assertFalse(m.node.loading.lifecycle.isActive)
-            m.assertFalse(m.node.loading.active)
-            m.assertFalse(m.top.visible)
-        end function
-
-        function installPreview()
-            m.node.rendering.video = m.node.rendering.previewHost.createChild("Video")
-            m.node.rendering.timer = m.node.rendering.previewHost.createChild("Timer")
-            m.node.rendering.preview = { covered: true, awaitingWrap: false, lastPosition: -1.0, playing: false }
-            getGlobalAa().dvdPreviewNode = m.node.rendering.video
         end function
 
     end class

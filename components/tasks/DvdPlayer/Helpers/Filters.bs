@@ -34,7 +34,7 @@ function sendFilterCommand(command as object) as object
         acceptSnapshot(result.data)
         publishFilterResult(command.requestId, true, "", "")
     else if errorCode = DvdFilter.Error.Pending or Number.ToInteger(result.status, 0) <= 0 or (result.status >= 500 and errorCode <> DvdFilter.Error.Checking) then
-        m.native.pendingFilter = command
+        m.native.pendingFilter = { requestId: command.requestId, admitted: errorCode = DvdFilter.Error.Pending, deadlineMs: m.schedule.clock.TotalMilliseconds() + 30000, expired: false }
         scheduleStatusPoll()
         status = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)
         if status.ok then acceptSnapshot(status.data)
@@ -54,8 +54,14 @@ end function
 sub reconcilePendingFilter()
     if m.native.pendingFilter = invalid or m.top.cancelRequested then return
     change = m.native.snapshot.filterChange
-    if type(change) <> "roAssociativeArray" then return
-    if not DvdPaths.SameId(change.requestId, m.native.pendingFilter.requestId) then return
+    matches = false
+    if type(change) = "roAssociativeArray" then matches = DvdPaths.SameId(change.requestId, m.native.pendingFilter.requestId)
+    if not matches then
+        ' Never infer rejection or send a new UUID after uncertain delivery.
+        if not m.native.pendingFilter.admitted and m.schedule.clock.TotalMilliseconds() >= m.native.pendingFilter.deadlineMs then m.native.pendingFilter.expired = true
+        return
+    end if
+    m.native.pendingFilter.admitted = true
     if change.state <> DvdFilter.Change.Accepted and change.state <> DvdFilter.Change.Rejected then return
     requestId = m.native.pendingFilter.requestId
     m.native.pendingFilter = invalid

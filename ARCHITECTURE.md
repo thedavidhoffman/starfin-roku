@@ -678,3 +678,10 @@ SettingsContent owns a single ordered category definition containing presentatio
 metadata and user/device membership. List metadata and storage are derived from
 that definition; SettingsNavigation.Category names all existing indices. Local
 category handlers and lazy panel ownership remain unchanged.
+
+DVD recovery keeps ownership at existing boundaries: DvdPlayer cleans up and emits
+an account-scoped authenticationRequired event; MainScene routes it through normal
+sign-in recovery. DvdSessionTask owns the 30-second unconfirmed-filter-admission
+window and session cleanup on expiry. Confirmed pending commands retain their
+existing acknowledgment flow. Catalog parse failures reuse the player's discovery
+failure presentation rather than introducing a second validity state.

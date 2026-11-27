@@ -341,6 +341,8 @@ metadata fallbacks, cleanup, and both resolution layouts remain unverified.
 
 Playback Back requires the advertised returnToLastMenu capability and current
 canReturnToLastMenu availability; hasMenuCheckpoint is informational, not a gate.
+When return is unavailable, Back exits the DVD. In-flight commands temporarily
+consume Back rather than interpreting a command lock as unavailable navigation.
 The Options main-menu shortcut remains separate; the overlay has no DVD menu button. Both actions revoke old media
 on acceptance and use current revisions/UUIDs. Restored audio/language registers
 come from the backend checkpoint, rolling back later authored changes. Return
@@ -623,7 +625,11 @@ rejections are nonfatal. Rejections refresh state before another user attempt,
 which gets a new UUID. Network retries preserve the exact UUID and body; explicit
 pending replies are not resubmitted. After pending or exhausted uncertain transport
 responses, status polling every two seconds matches filterChange.requestId until
-accepted or rejected. Unrelated/null results never release the lock. filter.pending is
+accepted or rejected. Unrelated/null results never establish an outcome. When delivery
+is uncertain and no matching acknowledgment arrives within 30 seconds, the task
+ends and cleans up the DVD session, displaying a retry message. It does not invent
+a rejection or resubmit a new UUID. An explicit pending reply or matching pending
+status confirms admission and continues normal acknowledgment polling. filter.pending is
 rendering lag and does not lock commands after acknowledgment. Existing session
 polling resumes after acknowledgment. Back exits through the blocking spinner throughout acknowledgment and startup; shutdown still cancels polling and deletes the
 session. Session expiration follows the existing recovery path.
@@ -886,3 +892,26 @@ Video/controls/pending commands, identity changes and genuine mapping gaps.
 Tests and builds have not been run. Deferred device acceptance: Revenge of the
 Cybermen on Synology, first twenty seconds and several minutes of playback, then
 stop/resume; confirm timeline stability and rejection of the previous stream's data.
+
+### Recovery and current verification coverage
+
+Manifest loading, native-session requests, and filter discovery forward expired
+authentication to MainScene's existing account-scoped sign-in recovery. Requests
+from detached players are ignored. Access-denied responses remain distinct from
+expired authentication.
+
+Filter catalogs follow the controlled three-category contract. Parsing/shape
+failure uses the existing load-failure/retry presentation and disables effect
+selection; it does not accept capability availability as catalog success. Retained
+valid Clear data stays usable for an active filter. No compatibility layer or
+additional catalog-validity state is introduced.
+
+The obsolete demo-button, manual-menu-map, stub-playback and retired endpoint tests
+have been replaced by current library/task/native-menu coverage. Remote automation
+enters DVDs through My Media, exercises Browse By cancellation, and opens/closes a
+selected native disc while checking retained title selection. It requires current
+plugin discovery, a visible My Media row and a nonempty scanned library. The old
+MP4 demo proxy is removed. Functional coverage includes Back recovery, authentication
+handoff, rejected catalog loading, uncertain filter admission and late outcomes.
+All new checks are deferred: no tests, builds, automated validation or device runs
+were performed during this implementation.
