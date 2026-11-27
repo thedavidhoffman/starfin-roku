@@ -8,10 +8,12 @@ namespace tests
             m.libraryId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
             m.discId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
             m.top.request = { server: "http://server/jellyfin/", token: "test-token", requestId: 7, action: "dvdDemoCatalog", library: { id: m.libraryId, libraryPath: "Starfin/Dvd/Libraries/" + m.libraryId }, demo: { id: m.discId, manifestPath: "Starfin/Dvd/Discs/" + m.discId + "/Manifest" } }
-            getGlobalAa().dvdRequests = []
-            m.stubCall(HttpClient.Request, function(url, method, token, body, headers, displayRequest, timeoutMs, jsonFlags)
-                getGlobalAa().dvdRequests.Push({ url: url, headers: headers })
-                return getGlobalAa().dvdReply
+            testState = getGlobalAa()
+            testState.dvdRequests = []
+            m.stubCall(HttpClient.Request, function(requestUrl, method, token, body, headers, displayRequest, timeoutMs, jsonFlags)
+                testState = getGlobalAa()
+                testState.dvdRequests.Push({ url: requestUrl, headers: headers })
+                return testState.dvdReply
             end function)
         end function
 
@@ -24,7 +26,8 @@ namespace tests
 
         @it("loads the library catalog with the session header and base path")
         function _()
-            getGlobalAa().dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-library-catalog/1", libraries: [m.top.request.library] } }
+            testState = getGlobalAa()
+            testState.dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-library-catalog/1", libraries: [m.top.request.library] } }
 
             'bs:disable-next-line 1140
             executeRequest()
@@ -42,7 +45,8 @@ namespace tests
             request = m.top.request
             request.action = "dvdLibrary"
             m.top.request = request
-            getGlobalAa().dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-library/1", id: m.libraryId, titles: [request.demo] } }
+            testState = getGlobalAa()
+            testState.dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-library/1", id: m.libraryId, titles: [request.demo] } }
 
             'bs:disable-next-line 1140
             executeRequest()
@@ -57,7 +61,8 @@ namespace tests
             request = m.top.request
             request.action = "dvdDemoLoad"
             m.top.request = request
-            getGlobalAa().dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-disc/2", id: m.discId, libraryId: m.libraryId, mode: "native-session", session: { schemaVersion: "starfin-dvd-session/1", startPath: "Starfin/Dvd/Discs/" + m.discId + "/Sessions" } } }
+            testState = getGlobalAa()
+            testState.dvdReply = { ok: true, data: { schemaVersion: "starfin-dvd-disc/2", id: m.discId, libraryId: m.libraryId, mode: "native-session", session: { schemaVersion: "starfin-dvd-session/1", startPath: "Starfin/Dvd/Discs/" + m.discId + "/Sessions" } } }
 
             'bs:disable-next-line 1140
             executeRequest()
@@ -68,7 +73,8 @@ namespace tests
 
         @it("preserves expired authentication for the page")
         function _()
-            getGlobalAa().dvdReply = { ok: false, status: 401, authExpired: true }
+            testState = getGlobalAa()
+            testState.dvdReply = { ok: false, status: 401, authExpired: true }
 
             'bs:disable-next-line 1140
             executeRequest()
@@ -79,7 +85,8 @@ namespace tests
 
         @it("reports malformed catalog data as a correlated failure")
         function _()
-            getGlobalAa().dvdReply = { ok: true, data: invalid }
+            testState = getGlobalAa()
+            testState.dvdReply = { ok: true, data: invalid }
 
             'bs:disable-next-line 1140
             executeRequest()

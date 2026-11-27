@@ -18,8 +18,6 @@ namespace tests
             m.node.native.revision = -1
             m.top.closeRequested = false
             m.top.authenticationRequired = invalid
-            'bs:disable-next-line 1001
-            m.stubCall(menuMediaRequest, { url: "pkg:/images/channel-fhd.png", headers: { Authorization: "MediaBrowser Token=test" } })
         end function
 
         protected override function afterEach()
@@ -150,10 +148,10 @@ namespace tests
             expectedWidth = "309"
             if ResolutionProfile.IsHd() then expectedWidth = "206"
             m.assertTrue(Instr(1, m.node.startupArtwork.poster.uri, "?tag=artwork&width=" + expectedWidth) > 0)
-            m.assertEqual(m.node.startupArtwork.poster.width, 309)
-            m.assertEqual(m.node.startupArtwork.poster.height, 464)
+            m.assertEqual(m.node.startupArtwork.poster.width, 309.0)
+            m.assertEqual(m.node.startupArtwork.poster.height, 464.0)
             m.assertEqual(m.node.startupArtwork.mask.scale, [1.5, 1.5])
-            m.assertEqual(m.node.startupArtwork.mask.translation, [728.25, 192])
+            m.assertEqual(m.node.startupArtwork.mask.translation, [728.25, 192.0])
             m.assertEqual(m.node.startupArtwork.poster.opacity, 0.65)
             m.assertTrue(Instr(1, m.node.startupArtwork.mask.maskUri, "poster-5-col-mask.png") > 0)
             m.assertFalse(m.node.startupArtwork.host.visible)
@@ -218,7 +216,7 @@ namespace tests
             m.node.native.snapshot = { state: "preparingPlayback", revision: 6 }
             m.node.nodes.host.visible = true
             snapshot = { state: "menu", revision: 7, menu: {
-                assetId: "menu", imagePath: "menu.jpg", aspectRatio: "4:3", sourceWidth: 720, sourceHeight: 480
+                assetId: "menu", imagePath: "Starfin/Dvd/Discs/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/Assets/generation/menu.jpg", aspectRatio: "4:3", sourceWidth: 720, sourceHeight: 480
                 selectedButton: 1, buttons: [{ id: 1, x: 100, y: 100, width: 100, height: 40 }]
             } }
             'bs:disable-next-line 1140
@@ -331,7 +329,7 @@ namespace tests
             snapshot = m.pendingMenuSnapshot()
             'bs:disable-next-line 1140
             startPreview()
-            snapshot.menu.imagePath = "replacement.jpg"
+            snapshot.menu.imagePath = "Starfin/Dvd/Discs/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/Assets/generation/replacement.jpg"
 
             'bs:disable-next-line 1140
             applySnapshot(snapshot)
@@ -409,7 +407,7 @@ namespace tests
             m.node.playback.failed = false
             m.node.playback.video = CreateObject("roSGNode", "Video")
             m.node.native.state = "playing"
-            return {
+            snapshot = {
                 capabilities: { titleTimeline: true, titleTimelineVersion: 2 }
                 playback: {
                     playbackId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", titleIdentity: { discId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", titleNumber: 3 }, durationSeconds: 200
@@ -418,6 +416,27 @@ namespace tests
                     ] } }
                 }
             }
+            return ParseJson(FormatJson(snapshot), "d")
+        end function
+
+        @it("accepts boxed integer timeline values")
+        function _()
+            identity = { titleNumber: 3 }
+
+            'bs:disable-next-line 1140
+            m.assertEqual(timelineNumber(identity.titleNumber), 3.0#)
+        end function
+
+        @it("rejects numeric strings as timeline values")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertInvalid(timelineNumber("3"))
+        end function
+
+        @it("rejects missing timeline values")
+        function _()
+            'bs:disable-next-line 1140
+            m.assertInvalid(timelineNumber(invalid))
         end function
 
         @it("derives presentation from the current video and measured mapping")
@@ -428,8 +447,8 @@ namespace tests
             result = getTimelinePresentation()
 
             m.assertEqual(result.available, true)
-            m.assertEqual(result.elapsed, 100)
-            m.assertEqual(result.duration, 200)
+            m.assertTrue(result.elapsed = 100)
+            m.assertTrue(result.duration = 200)
         end function
 
         @it("rejects a measured snapshot belonging to replaced playback")
@@ -455,7 +474,7 @@ namespace tests
             result = getTimelinePresentation()
 
             m.assertEqual(result.available, true)
-            m.assertEqual(result.elapsed, 50)
+            m.assertTrue(result.elapsed = 50)
         end function
 
         @it("refreshes same-revision timeline without replacing video or controls")
@@ -473,7 +492,7 @@ namespace tests
             'bs:disable-next-line 1140
             applySnapshot(fresh)
 
-            m.assertEqual(m.node.nodes.controls.timeline.elapsed, 110)
+            m.assertTrue(m.node.nodes.controls.timeline.elapsed = 110)
             m.assertTrue(m.node.playback.video.isSameNode(video))
             m.assertTrue(m.node.nodes.controls.visible)
             m.assertEqual(m.node.native.inFlight.requestId, "pending")
@@ -529,7 +548,7 @@ namespace tests
             ]
 
             'bs:disable-next-line 1140
-            m.assertEqual(measuredTitlePosition(ranges, 3, 200), 103)
+            m.assertEqual(measuredTitlePosition(ranges, 3, 200), 103.0#)
         end function
 
         @it("preserves a one-tick output interval late in playback")
@@ -558,7 +577,7 @@ namespace tests
             ranges = [{ outputStartSeconds: 2, outputEndSeconds: 3, titleStartSeconds: 102, titleEndSeconds: 102 }]
 
             'bs:disable-next-line 1140
-            m.assertEqual(measuredTitlePosition(ranges, 2.5, 200), 102)
+            m.assertEqual(measuredTitlePosition(ranges, 2.5, 200), 102.0#)
         end function
 
         @it("leaves unknown gaps unavailable")

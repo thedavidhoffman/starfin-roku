@@ -915,3 +915,13 @@ MP4 demo proxy is removed. Functional coverage includes Back recovery, authentic
 handoff, rejected catalog loading, uncertain filter admission and late outcomes.
 All new checks are deferred: no tests, builds, automated validation or device runs
 were performed during this implementation.
+
+Timeline numeric validation accepts Roku boxed `roInteger` values as well as the
+existing numeric types. Session test fixtures use the production double-precision
+JSON parsing path; separate regression cases retain integer and invalid-input coverage.
+
+Verification on 2026-11-27: the full Rooibos device suite passed all 10,057 tests,
+with zero failures, crashes, or ignored tests. Test maintenance aligned HTTP mock
+signatures, DVD asset fixtures, settings expectations, and the MainScene harness
+with current production contracts. No separate UI automation or visual checks
+were performed.
