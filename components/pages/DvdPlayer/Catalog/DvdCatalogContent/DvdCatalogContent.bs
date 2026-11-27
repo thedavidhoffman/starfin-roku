@@ -1,22 +1,31 @@
 import "pkg:/source/Remote.bs"
 import "pkg:/source/String.bs"
-import "pkg:/source/Number.bs"
 
 '-------------------------------------------------------------------------------
 ' init
 '-------------------------------------------------------------------------------
 sub init()
     m.nodes = { list: m.top.findNode("titles"), status: m.top.findNode("status") }
-    m.catalog = { demos: [], loading: false, titlesView: false }
+    m.catalog = { demos: [], loading: false, titlesView: false, focusedIndex: 0 }
     m.nodes.list.observeField("itemSelected", "onTitleSelected")
+    m.top.observeField("focusedChild", "renderDiscFocus")
 end sub
 
 '-------------------------------------------------------------------------------
 ' showEntries
 '-------------------------------------------------------------------------------
 sub showEntries(demos as object, titlesView as boolean)
+    m.nodes.list.visible = false
+    if titlesView then
+        m.nodes.list = m.top.findNode("discs")
+    else
+        m.nodes.list = m.top.findNode("titles")
+    end if
+    m.nodes.list.unobserveField("itemSelected")
+    m.nodes.list.observeField("itemSelected", "onTitleSelected")
     m.catalog.demos = demos
     m.catalog.titlesView = titlesView
+    m.catalog.focusedIndex = 0
     if demos.Count() = 0 then
         message = "No enabled DVD libraries are available."
         if titlesView then message = "No published DVD scans are available in this library."
@@ -28,8 +37,9 @@ sub showEntries(demos as object, titlesView as boolean)
     content = CreateObject("roSGNode", "ContentNode")
     for each demo in demos
         label = Strings.ToString(demo.name, demo.id)
-        if titlesView then label = discEntryLabel(demo)
-        content.createChild("ContentNode").title = label
+        entry = content.createChild("ContentNode")
+        entry.title = label
+        if titlesView then entry.addFields({ discFocused: false })
     end for
     m.nodes.list.content = content
     m.nodes.list.visible = true
@@ -51,11 +61,29 @@ end sub
 ' focusItems
 '-------------------------------------------------------------------------------
 sub focusItems()
-    if m.nodes.list.visible then
+    if m.catalog.titlesView then
+        m.top.setFocus(true)
+        renderDiscFocus()
+    else if m.nodes.list.visible then
         m.nodes.list.setFocus(true)
     else
         m.top.setFocus(true)
     end if
+end sub
+
+'-------------------------------------------------------------------------------
+' renderDiscFocus
+'-------------------------------------------------------------------------------
+sub renderDiscFocus()
+    if not m.catalog.titlesView then return
+    content = m.nodes.list.content
+    if content = invalid then return
+    hasFocus = m.top.isInFocusChain() and m.nodes.list.visible
+    for itemIndex = 0 to content.getChildCount() - 1
+        entry = content.getChild(itemIndex)
+        entry.discFocused = hasFocus and itemIndex = m.catalog.focusedIndex
+    end for
+    if hasFocus and m.nodes.list.itemFocused <> m.catalog.focusedIndex then m.nodes.list.jumpToItem = m.catalog.focusedIndex
 end sub
 
 '-------------------------------------------------------------------------------
@@ -72,6 +100,18 @@ end sub
 '-------------------------------------------------------------------------------
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+    if m.catalog.titlesView and m.nodes.list.visible and not m.catalog.loading then
+        if key = Remote.Key.Up or key = Remote.Key.Down then
+            if key = Remote.Key.Up and m.catalog.focusedIndex > 0 then m.catalog.focusedIndex--
+            if key = Remote.Key.Down and m.catalog.focusedIndex + 1 < m.catalog.demos.Count() then m.catalog.focusedIndex++
+            renderDiscFocus()
+            return true
+        end if
+        if key = Remote.Key.OK or key = Remote.Key.Select then
+            m.top.selectedDemo = m.catalog.demos[m.catalog.focusedIndex]
+            return true
+        end if
+    end if
     if key = Remote.Key.Options then
         if m.top.allowRefresh and not m.catalog.loading then m.top.retryRequested = true
         return true
@@ -81,20 +121,4 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     return false
-end function
-
-'-------------------------------------------------------------------------------
-' discEntryLabel
-'-------------------------------------------------------------------------------
-function discEntryLabel(disc as object) as string
-    discNumber = Number.ToInteger(disc.discNumber, 0)
-    sideNumber = Number.ToInteger(disc.sideNumber, 0)
-    label = ""
-    if discNumber > 0 then label = "Disc " + discNumber.ToStr()
-    if sideNumber > 0 then
-        if label <> "" then label += ", "
-        label += "Side " + sideNumber.ToStr()
-    end if
-    if label = "" then label = Strings.ToString(disc.name, disc.id)
-    return label
 end function

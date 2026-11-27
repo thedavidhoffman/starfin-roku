@@ -1,0 +1,81 @@
+import "pkg:/source/ResolutionProfile.bs"
+import "pkg:/source/ResolutionAssets.bs"
+
+'-------------------------------------------------------------------------------
+' init
+'-------------------------------------------------------------------------------
+sub init()
+    m.nodes = { background: m.top.findNode("background"), highlight: m.top.findNode("highlight"), title: m.top.findNode("title") }
+    m.nodes.background.uri = "pkg:/images/settings/" + ResolutionProfile.GetName() + "/settings-card-glass.9.png"
+    m.nodes.highlight.uri = ResolutionAssets.GetButtonImageUri("primary-focused.9.png")
+    m.binding = { item: invalid }
+    m.top.observeField("itemContent", "renderContent")
+    renderContent()
+    renderFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderContent
+'-------------------------------------------------------------------------------
+sub renderContent()
+    if m.binding.item <> invalid then m.binding.item.unobserveFieldScoped("discFocused")
+    m.binding.item = m.top.itemContent
+    if m.binding.item = invalid then
+        m.nodes.title.text = ""
+        renderFocus()
+        return
+    end if
+    m.binding.item.observeFieldScoped("discFocused", "renderFocus")
+    m.nodes.title.text = balanceTitle(m.binding.item.title)
+    textHeight = m.nodes.title.boundingRect().height
+    m.nodes.title.translation = [35, 3 + (m.nodes.background.height - textHeight) / 2]
+    renderFocus()
+end sub
+
+'-------------------------------------------------------------------------------
+' renderFocus
+'-------------------------------------------------------------------------------
+sub renderFocus()
+    focusAmount = 0.0
+    if m.binding.item <> invalid then
+        if m.binding.item.discFocused then focusAmount = 1.0
+    end if
+    m.nodes.highlight.opacity = focusAmount
+    m.nodes.title.color = &hF3F7FBFF
+    if focusAmount >= 0.5 then m.nodes.title.color = &h0F1A2AFF
+end sub
+
+'-------------------------------------------------------------------------------
+' balanceTitle
+'-------------------------------------------------------------------------------
+function balanceTitle(title as string) as string
+    measurement = CreateObject("roSGNode", "Label")
+    measurement.font = m.nodes.title.font
+    measurement.text = title
+    availableWidth = m.nodes.title.width
+    if measurement.boundingRect().width <= availableWidth then return title
+    if Instr(1, title, Chr(10)) > 0 then return title
+
+    bestTitle = title
+    bestDifference = -1.0
+    for splitIndex = 1 to Len(title) - 1
+        if Mid(title, splitIndex, 1) = " " then
+            firstLine = Left(title, splitIndex - 1).Trim()
+            secondLine = Mid(title, splitIndex + 1).Trim()
+            if firstLine <> "" and secondLine <> "" then
+                measurement.text = firstLine
+                firstWidth = measurement.boundingRect().width
+                measurement.text = secondLine
+                secondWidth = measurement.boundingRect().width
+                if firstWidth <= availableWidth and secondWidth <= availableWidth then
+                    difference = Abs(firstWidth - secondWidth)
+                    if bestDifference < 0 or difference < bestDifference then
+                        bestDifference = difference
+                        bestTitle = firstLine + Chr(10) + secondLine
+                    end if
+                end if
+            end if
+        end if
+    end for
+    return bestTitle
+end function

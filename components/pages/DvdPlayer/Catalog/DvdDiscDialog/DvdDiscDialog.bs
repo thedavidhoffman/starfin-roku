@@ -1,17 +1,24 @@
+import "pkg:/source/Number.bs"
+
 '-------------------------------------------------------------------------------
 ' openPicker
 '-------------------------------------------------------------------------------
 sub openPicker()
     m.top.title = m.top.groupName
     m.top.dialogWidth = 800
-    m.top.dialogHeight = 590
+    visibleDiscCount = m.top.discs.Count()
+    if visibleDiscCount > 5 then visibleDiscCount = 5
+    if visibleDiscCount < 1 then visibleDiscCount = 1
+    m.top.dialogHeight = 202 + visibleDiscCount * 124
     m.top.closeOnContentSelected = false
     m.top.contentComponentName = "DvdCatalogContent"
     content = m.top.callFunc("getContentComponent")
     content.allowRefresh = false
+    content.discVisibleRows = visibleDiscCount
     content.observeField("selectedDemo", "onDiscSelected")
     m.top.callFunc("openDialog")
     content.callFunc("showEntries", m.top.discs, true)
+    layoutWrappedHeading()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -31,3 +38,24 @@ function focusContent() as boolean
     content.callFunc("focusItems")
     return true
 end function
+
+'-------------------------------------------------------------------------------
+' layoutWrappedHeading
+'-------------------------------------------------------------------------------
+sub layoutWrappedHeading()
+    m.titleLabel.height = 0
+    m.titleLabel.wrap = true
+    m.titleLabel.maxLines = 2
+    headingHeight = m.titleLabel.boundingRect().height
+    if headingHeight <= 56 then return
+    headingBottom = m.titleLabel.translation[1] + headingHeight
+    extraHeight = Number.ToInteger(headingBottom + 16 - m.titleRule.translation[1] + 0.999, 0)
+
+    ' Size changes recenter the shared frame before applying the extra heading space.
+    m.top.dialogHeight += extraHeight
+    updateDialogSize()
+    rulePosition = m.titleRule.translation
+    m.titleRule.translation = [rulePosition[0], rulePosition[1] + extraHeight]
+    contentPosition = m.content.translation
+    m.content.translation = [contentPosition[0], contentPosition[1] + extraHeight]
+end sub
