@@ -66,6 +66,39 @@ namespace tests
             m.assertEqual(HttpClient.__MaskUrl("https://server/stream?ApiKey=secret&x=1"), "https://server/stream?ApiKey=[redacted]&x=1")
         end function
 
+        @describe("uploaded failure diagnostics")
+
+        @it("uploads timeout classification and measured timing")
+        function _()
+            collector = { appendRequested: "" }
+            log = new Logger("HttpClient.Request", collector)
+
+            HttpClient.__LogFailure(log, "GET", "http://server/Filters", 0, RequestFailure.Kind.Timeout, 3002, 3000)
+
+            m.assertTrue(Instr(1, collector.appendRequested, "failureKind=timeout") > 0)
+            m.assertTrue(Instr(1, collector.appendRequested, "elapsedMs=3002 timeoutMs=3000") > 0)
+            m.assertTrue(Instr(1, collector.appendRequested, "reason=The server took too long to respond.") > 0)
+        end function
+
+        @it("redacts credentials from uploaded transport failures")
+        function _()
+            collector = { appendRequested: "" }
+            log = new Logger("HttpClient.Request", collector)
+
+            HttpClient.__LogFailure(log, "GET", "http://user:secret@server/Filters?api_key=private", -7, RequestFailure.Kind.ConnectionFailed, 100, 3000)
+
+            m.assertTrue(Instr(1, collector.appendRequested, "failureKind=connectionFailed") > 0)
+            m.assertTrue(Instr(1, collector.appendRequested, "status=-7") > 0)
+            m.assertTrue(Instr(1, collector.appendRequested, "secret") = 0)
+            m.assertTrue(Instr(1, collector.appendRequested, "private") = 0)
+        end function
+
+        @it("does not propagate a diagnostic writer failure")
+        function _()
+            HttpClient.__LogFailure({}, "GET", "http://server", 0, RequestFailure.Kind.RequestStartFailed, 0, 3000)
+            m.assertTrue(true)
+        end function
+
         @describe("request validation")
 
         @it("preserves the invalid URL response")

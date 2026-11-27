@@ -8,12 +8,18 @@ sub startPreview()
     path = Strings.ToString(m.rendering.asset.previewLoop)
     live = path <> ""
     if not live then path = Strings.ToString(m.rendering.asset.previewVideo)
-    if path = "" then return
+    if path = "" then
+        revealMenuBackground()
+        return
+    end if
     if live and m.rendering.previewFailures.DoesExist(path) then
         if m.rendering.previewFailures[path].TotalMilliseconds() < 30000 then
             path = Strings.ToString(m.rendering.asset.previewVideo)
             live = false
-            if path = "" then return
+            if path = "" then
+                revealMenuBackground()
+                return
+            end if
         end if
         if live then m.rendering.previewFailures.Delete(path)
     end if
@@ -68,6 +74,7 @@ sub failPreview()
         end if
     end if
     stopPreview()
+    revealMenuBackground()
     if m.loading.active and m.rendering.asset <> invalid then
         if Strings.ToString(m.rendering.asset.previewLoop) <> "" and Strings.ToString(m.rendering.asset.previewVideo) <> "" then
             m.rendering.asset.previewLoop = ""
@@ -174,6 +181,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub setPreviewCovered(covered as boolean)
     if m.rendering.image <> invalid then m.rendering.image.visible = covered
+    if not covered then revealMenuBackground()
     if m.rendering.preview = invalid then return
     changed = m.rendering.preview.covered <> covered
     m.rendering.preview.covered = covered
@@ -194,4 +202,23 @@ sub onPreviewTimeout(event as object)
     if not event.getRoSGNode().isSameNode(m.rendering.timer) then return
     m.log.write("Preview covered timeout")
     failPreview()
+end sub
+
+'-------------------------------------------------------------------------------
+' revealMenuBackground
+'-------------------------------------------------------------------------------
+sub revealMenuBackground()
+    if not m.rendering.waitingForReveal then return
+    if not m.loading.active or m.loading.failed then return
+    ' Preparation can retain this background; remember readiness until menu reentry.
+    m.rendering.backgroundReady = true
+    if m.native.state <> DvdSession.State.Menu then return
+    m.rendering.waitingForReveal = false
+    clearStartupArtwork()
+    if m.rendering.retainedRoot <> invalid then
+        m.nodes.host.removeChild(m.rendering.retainedRoot)
+        m.rendering.retainedRoot = invalid
+    end if
+    renderMenuHighlight()
+    reconcilePlayerPresentation()
 end sub

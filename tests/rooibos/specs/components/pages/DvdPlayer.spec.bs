@@ -39,6 +39,232 @@ namespace tests
             return { initialScreen: "home", disc: { ifoSha256: "fixture", menuAssets: [asset], titleSets: [titleSet, extraSet], titles: [{ number: 6, titleSet: 2, titleWithinSet: 5, pgcs: [1], chapters: chapters }, { number: 7, titleSet: 3, titleWithinSet: 1, pgcs: [1], chapters: chapters }], reviewedInterpretation: { episodes: [], specialFeatures: [] } }, menuMap: { screens: screens } }
         end function
 
+        @describe("initial DVD loading artwork")
+
+        function startupDisc() as object
+            return { startupArtwork: {
+                metadataId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", size: [309, 464], columns: 5
+                path: "Starfin/Dvd/Images/Titles/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/Poster?tag=artwork"
+            } }
+        end function
+
+        @it("loads the selected poster through the configured server base path")
+        function _()
+            m.node.session.demo = m.startupDisc()
+
+            'bs:disable-next-line 1140
+            beginStartupArtwork()
+
+            m.assertTrue(m.node.startupArtwork.poster <> invalid)
+            m.assertTrue(Instr(1, m.node.startupArtwork.poster.uri, "http://server/jellyfin/Starfin/Dvd/Images/Titles/") = 1)
+            m.assertTrue(Instr(1, m.node.startupArtwork.poster.uri, "?tag=artwork&width=") > 0)
+            expectedWidth = "309"
+            if ResolutionProfile.IsHd() then expectedWidth = "206"
+            m.assertTrue(Instr(1, m.node.startupArtwork.poster.uri, "?tag=artwork&width=" + expectedWidth) > 0)
+            m.assertEqual(m.node.startupArtwork.poster.width, 309)
+            m.assertEqual(m.node.startupArtwork.poster.height, 464)
+            m.assertEqual(m.node.startupArtwork.mask.scale, [1.5, 1.5])
+            m.assertEqual(m.node.startupArtwork.mask.translation, [728.25, 192])
+            m.assertEqual(m.node.startupArtwork.poster.opacity, 0.65)
+            m.assertTrue(Instr(1, m.node.startupArtwork.mask.maskUri, "poster-5-col-mask.png") > 0)
+            m.assertFalse(m.node.startupArtwork.host.visible)
+        end function
+
+        @it("keeps a plain background when the selected disc has no poster")
+        function _()
+            m.node.session.demo = { metadataId: "" }
+
+            'bs:disable-next-line 1140
+            beginStartupArtwork()
+
+            m.assertEqual(m.node.startupArtwork.poster, invalid)
+            m.assertFalse(m.node.startupArtwork.host.visible)
+        end function
+
+        @it("releases startup artwork when the menu becomes ready")
+        function _()
+            m.pendingMenuSnapshot()
+            m.node.session.demo = m.startupDisc()
+            'bs:disable-next-line 1140
+            beginStartupArtwork()
+            poster = m.node.startupArtwork.poster
+            m.node.native.state = "menu"
+
+            'bs:disable-next-line 1140
+            revealMenuBackground()
+
+            m.assertEqual(m.node.startupArtwork.poster, invalid)
+            m.assertEqual(poster.uri, "")
+            m.assertFalse(m.node.startupArtwork.host.visible)
+        end function
+
+        @it("ignores failures from an artwork request replaced by a new launch")
+        function _()
+            m.node.session.demo = m.startupDisc()
+            'bs:disable-next-line 1140
+            beginStartupArtwork()
+            getGlobalAa().oldDvdStartupPoster = m.node.startupArtwork.poster
+            'bs:disable-next-line 1140
+            beginStartupArtwork()
+            currentPoster = m.node.startupArtwork.poster
+            event = { getRoSGNode: function()
+                return getGlobalAa().oldDvdStartupPoster
+            end function, getData: function()
+                return "failed"
+            end function }
+
+            'bs:disable-next-line 1140
+            onStartupPosterStatus(event)
+
+            m.assertTrue(m.node.startupArtwork.poster.isSameNode(currentPoster))
+            getGlobalAa().Delete("oldDvdStartupPoster")
+        end function
+
+        @describe("menu readiness during preparation")
+
+        function pendingMenuSnapshot() as object
+            m.node.loading.failed = false
+            m.node.native.state = "preparingPlayback"
+            m.node.native.revision = 6
+            m.node.native.snapshot = { state: "preparingPlayback", revision: 6 }
+            m.node.nodes.host.visible = true
+            snapshot = { state: "menu", revision: 7, menu: {
+                assetId: "menu", imagePath: "menu.jpg", aspectRatio: "4:3", sourceWidth: 720, sourceHeight: 480
+                selectedButton: 1, buttons: [{ id: 1, x: 100, y: 100, width: 100, height: 40 }]
+            } }
+            'bs:disable-next-line 1140
+            renderScreen(snapshot.menu)
+            ' Readiness is supplied explicitly by each case, not an asynchronous image load.
+            m.node.rendering.image.unobserveField("loadStatus")
+            m.node.rendering.previewStarted = true
+            return snapshot
+        end function
+
+        @it("keeps unresolved menu navigation free of a playback spinner")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            'bs:disable-next-line 1140
+            startPreview()
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            background = m.node.rendering.root
+
+            'bs:disable-next-line 1140
+            applySnapshot({ state: "starting", revision: 8 })
+
+            m.assertTrue(m.node.nodes.host.visible)
+            m.assertTrue(m.node.rendering.root.isSameNode(background))
+            m.assertFalse(m.node.presentation.loading)
+            m.assertFalse(m.node.presentation.spinnerRunning)
+        end function
+
+        @it("shows preparation immediately over a retained menu")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            'bs:disable-next-line 1140
+            startPreview()
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            background = m.node.rendering.root
+
+            'bs:disable-next-line 1140
+            applySnapshot({ state: "preparingPlayback", revision: 8 })
+
+            m.assertTrue(m.node.nodes.host.visible)
+            m.assertTrue(m.node.rendering.root.isSameNode(background))
+            m.assertTrue(m.node.presentation.loading)
+            m.assertTrue(m.node.presentation.spinnerRunning)
+            m.assertEqual(m.node.playback.video, invalid)
+        end function
+
+        @it("shows preparation after an unresolved navigation response")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            'bs:disable-next-line 1140
+            startPreview()
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            'bs:disable-next-line 1140
+            applySnapshot({ state: "starting", revision: 8 })
+
+            'bs:disable-next-line 1140
+            applySnapshot({ state: "preparingPlayback", revision: 9 })
+
+            m.assertTrue(m.node.presentation.spinnerRunning)
+        end function
+
+        @it("reveals a static background that became ready during preparation")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            background = m.node.rendering.root
+
+            'bs:disable-next-line 1140
+            startPreview()
+
+            m.assertTrue(m.node.rendering.backgroundReady)
+            m.assertTrue(m.node.rendering.waitingForReveal)
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertTrue(m.node.rendering.root.isSameNode(background))
+            m.assertFalse(m.node.rendering.waitingForReveal)
+            m.assertFalse(m.node.nodes.menuStartupCover.visible)
+            m.assertFalse(m.node.presentation.spinnerRunning)
+            m.assertTrue(m.node.rendering.buttons["1"].getChild(0).visible)
+        end function
+
+        @it("reveals fallback after a preview fails during preparation")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            m.node.rendering.asset.previewVideo = "menu.mp4"
+            retained = m.node.nodes.host.createChild("Group")
+            m.node.rendering.retainedRoot = retained
+
+            'bs:disable-next-line 1140
+            failPreview()
+
+            m.assertTrue(m.node.rendering.backgroundReady)
+            m.assertTrue(m.node.rendering.waitingForReveal)
+            m.assertTrue(m.node.rendering.retainedRoot.isSameNode(retained))
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertFalse(m.node.rendering.waitingForReveal)
+            m.assertEqual(m.node.rendering.retainedRoot, invalid)
+            m.assertTrue(m.node.rendering.image.visible)
+            m.assertFalse(m.node.presentation.spinnerRunning)
+        end function
+
+        @it("does not reuse readiness for a replacement background")
+        function _()
+            snapshot = m.pendingMenuSnapshot()
+            'bs:disable-next-line 1140
+            startPreview()
+            snapshot.menu.imagePath = "replacement.jpg"
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertFalse(m.node.rendering.backgroundReady)
+            m.assertTrue(m.node.rendering.waitingForReveal)
+            m.assertTrue(m.node.presentation.spinnerRunning)
+        end function
+
+        @it("discards deferred readiness during cleanup")
+        function _()
+            m.pendingMenuSnapshot()
+            'bs:disable-next-line 1140
+            startPreview()
+
+            m.top.callFunc("deactivate")
+
+            m.assertFalse(m.node.rendering.backgroundReady)
+            m.assertFalse(m.node.rendering.waitingForReveal)
+            m.assertFalse(m.node.nodes.menuStartupCover.visible)
+        end function
+
         @describe("measured DVD title progress")
 
         function measuredSnapshot() as object
@@ -97,6 +323,69 @@ namespace tests
 
             m.assertEqual(result.available, true)
             m.assertEqual(result.elapsed, 50)
+        end function
+
+        @it("refreshes same-revision timeline without replacing video or controls")
+        function _()
+            fresh = m.measuredSnapshot()
+            fresh.revision = 7
+            fresh.state = "playing"
+            m.node.native.revision = 7
+            m.node.native.inFlight = { requestId: "pending", action: "progress" }
+            video = m.node.playback.video
+            m.node.nodes.controls.visible = true
+            fresh.playback.titleTimeline.mapping.ranges[0].titleStartSeconds = 110
+            fresh.playback.titleTimeline.mapping.ranges[0].titleEndSeconds = 112
+
+            'bs:disable-next-line 1140
+            applySnapshot(fresh)
+
+            m.assertEqual(m.node.nodes.controls.timeline.elapsed, 110)
+            m.assertTrue(m.node.playback.video.isSameNode(video))
+            m.assertTrue(m.node.nodes.controls.visible)
+            m.assertEqual(m.node.native.inFlight.requestId, "pending")
+        end function
+
+        @it("does not replace the player's timeline with an older revision")
+        function _()
+            snapshot = m.measuredSnapshot()
+            snapshot.revision = 6
+            snapshot.state = "playing"
+            m.node.native.revision = 7
+            m.node.nodes.controls.timeline = { available: true, elapsed: 120, duration: 200 }
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertEqual(m.node.nodes.controls.timeline.elapsed, 120)
+            m.assertEqual(m.node.native.revision, 7)
+        end function
+
+        @it("reports an actual mapping gap as unavailable after refresh")
+        function _()
+            snapshot = m.measuredSnapshot()
+            snapshot.revision = 7
+            snapshot.state = "playing"
+            snapshot.playback.titleTimeline.mapping.ranges[0].outputStartSeconds = 1
+            m.node.native.revision = 7
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertFalse(m.node.nodes.controls.timeline.available)
+            m.assertEqual(m.node.nodes.controls.timeline.reason, "unmapped-position")
+        end function
+
+        @it("rejects the previous timeline when resume creates a new playback identity")
+        function _()
+            m.node.native.snapshot = m.measuredSnapshot()
+            m.node.playback.id = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+
+            'bs:disable-next-line 1140
+            result = getTimelinePresentation()
+
+            m.assertFalse(result.available)
+            m.assertEqual(result.reason, "playback-id-mismatch")
         end function
 
         @it("maps continuous output across a source timestamp reset")

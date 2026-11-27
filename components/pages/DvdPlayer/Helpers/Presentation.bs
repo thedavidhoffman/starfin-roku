@@ -5,6 +5,8 @@ import "pkg:/source/AnimationControl.bs"
 ' reconcilePlayerPresentation
 '-------------------------------------------------------------------------------
 sub reconcilePlayerPresentation()
+    menuWaiting = m.nodes.host.visible and m.rendering.waitingForReveal
+    m.nodes.menuStartupCover.visible = menuWaiting and m.rendering.retainedRoot = invalid
     reconcileFilterTransition()
     syncTimeline()
     publishFilters()
@@ -25,6 +27,11 @@ end sub
 ' reconcileBlockingPresentation
 '-------------------------------------------------------------------------------
 sub reconcileBlockingPresentation()
+    spinnerRunning = not m.filters.busy and (m.presentation.loading or (m.nodes.host.visible and m.rendering.waitingForReveal))
+    if spinnerRunning <> m.presentation.spinnerRunning then
+        m.presentation.spinnerRunning = spinnerRunning
+        m.log.write("Timing loading-spinner visible=" + spinnerRunning.ToStr() + " sessionId=" + m.native.requestId + " playbackId=" + m.playback.id + " state=" + m.native.state)
+    end if
     if m.filters.busy then
         m.nodes.spinner.control = SpinnerControl.Command.Stop
         m.nodes.filterSpinner.control = SpinnerControl.Command.Start
@@ -32,7 +39,7 @@ sub reconcileBlockingPresentation()
     else
         hadFocus = m.nodes.filterSpinner.isInFocusChain()
         m.nodes.filterSpinner.control = SpinnerControl.Command.Stop
-        if m.presentation.loading then
+        if m.presentation.loading or (m.nodes.host.visible and m.rendering.waitingForReveal) then
             m.nodes.spinner.control = SpinnerControl.Command.Start
         else
             m.nodes.spinner.control = SpinnerControl.Command.Stop
@@ -55,7 +62,7 @@ sub restorePlayerFocus()
         m.top.setFocus(true)
     else if m.nodes.controls.visible then
         m.nodes.controls.callFunc("focusControls")
-    else if m.native.state = DvdSession.State.Menu and not m.native.navigating and m.native.inFlight = invalid and m.rendering.buttons.DoesExist(m.menu.focused.ToStr()) then
+    else if m.native.state = DvdSession.State.Menu and not m.rendering.waitingForReveal and not m.native.navigating and m.native.inFlight = invalid and m.rendering.buttons.DoesExist(m.menu.focused.ToStr()) then
         m.rendering.buttons[m.menu.focused.ToStr()].setFocus(true)
     else
         m.top.setFocus(true)
@@ -113,7 +120,7 @@ end sub
 ' reconcileFilterHint
 '-------------------------------------------------------------------------------
 sub reconcileFilterHint()
-    eligible = m.loading.active and not m.loading.failed and not m.resume.closing and m.native.state = DvdSession.State.Menu and filterEntryVisible() and not m.filters.open and not m.filters.busy
+    eligible = m.loading.active and not m.loading.failed and not m.resume.closing and m.native.state = DvdSession.State.Menu and filterEntryVisible() and not m.filters.open and not m.filters.busy and not m.rendering.waitingForReveal
     if not eligible then
         hideFilterHint()
         return

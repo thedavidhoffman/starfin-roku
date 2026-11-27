@@ -1,3 +1,5 @@
+import "pkg:/source/TimerControl.bs"
+
 namespace DvdHighlight
     enum State
         Selected = "selected"
@@ -47,6 +49,12 @@ sub syncHighlightSheet(menu as object)
         agent.AddHeader("Authorization", media.headers.Authorization)
         poster.setHttpAgent(agent)
         poster.observeField("loadStatus", "onHighlightSheetStatus")
+        timer = m.top.createChild("Timer")
+        m.highlights.timer = timer
+        timer.duration = 2
+        timer.repeat = false
+        timer.observeField("fire", "onHighlightWaitTimeout")
+        timer.control = TimerControl.Command.Start
         poster.uri = media.url
     catch error
         clearHighlightSheet()
@@ -113,6 +121,21 @@ sub onHighlightSheetStatus(event as object)
     if not m.loading.active or m.loading.failed or m.highlights.poster = invalid then return
     if m.native.state <> DvdSession.State.Menu then return
     if not event.getRoSGNode().isSameNode(m.highlights.poster) then return
+    if m.highlights.poster.loadStatus = "ready" or m.highlights.poster.loadStatus = "failed" then
+        m.highlights.timer.control = TimerControl.Command.Stop
+    end if
+    renderMenuHighlight()
+end sub
+
+'-------------------------------------------------------------------------------
+' onHighlightWaitTimeout
+'-------------------------------------------------------------------------------
+sub onHighlightWaitTimeout(event as object)
+    if not m.loading.active or m.loading.failed or m.highlights.timer = invalid then return
+    if m.native.state <> DvdSession.State.Menu then return
+    if not event.getRoSGNode().isSameNode(m.highlights.timer) then return
+    ' Reveal fallback without cancelling the image request; late artwork remains usable.
+    m.highlights.waitExpired = true
     renderMenuHighlight()
 end sub
 
@@ -128,18 +151,22 @@ sub renderMenuHighlight()
             exit for
         end if
     end for
+    if m.rendering.waitingForReveal then showHighlight = false
     sprite = invalid
+    waitingForSprite = false
     if m.highlights.root <> invalid then m.highlights.root.visible = false
     if showHighlight and m.highlights.poster <> invalid then
-        if m.highlights.poster.loadStatus = "ready" then
-            selectedSprite = invalid
-            for each candidate in m.highlights.descriptor.sprites
-                if candidate.buttonId = m.menu.focused then
-                    if candidate.state = DvdHighlight.State.Selected then selectedSprite = candidate
-                    if candidate.state = m.highlights.state then sprite = candidate
-                end if
-            end for
-            if sprite = invalid and m.highlights.state = DvdHighlight.State.Activated then sprite = selectedSprite
+        selectedSprite = invalid
+        for each candidate in m.highlights.descriptor.sprites
+            if candidate.buttonId = m.menu.focused then
+                if candidate.state = DvdHighlight.State.Selected then selectedSprite = candidate
+                if candidate.state = m.highlights.state then sprite = candidate
+            end if
+        end for
+        if sprite = invalid and m.highlights.state = DvdHighlight.State.Activated then sprite = selectedSprite
+        if m.highlights.poster.loadStatus <> "ready" then
+            waitingForSprite = sprite <> invalid and m.highlights.poster.loadStatus <> "failed" and not m.highlights.waitExpired
+            sprite = invalid
         end if
     end if
     if sprite <> invalid then
@@ -153,7 +180,7 @@ sub renderMenuHighlight()
         m.highlights.root.visible = true
     end if
     for each buttonKey in m.rendering.buttons
-        m.rendering.buttons[buttonKey].getChild(0).visible = buttonKey = key and showHighlight and sprite = invalid
+        m.rendering.buttons[buttonKey].getChild(0).visible = buttonKey = key and showHighlight and sprite = invalid and not waitingForSprite
     end for
 end sub
 
@@ -161,6 +188,14 @@ end sub
 ' clearHighlightSheet
 '-------------------------------------------------------------------------------
 sub clearHighlightSheet()
+    timer = m.highlights.timer
+    m.highlights.timer = invalid
+    m.highlights.waitExpired = false
+    if timer <> invalid then
+        timer.unobserveField("fire")
+        timer.control = TimerControl.Command.Stop
+        m.top.removeChild(timer)
+    end if
     if m.highlights.poster <> invalid then m.highlights.poster.unobserveField("loadStatus")
     if m.highlights.root <> invalid then m.nodes.host.removeChild(m.highlights.root)
     m.highlights.poster = invalid

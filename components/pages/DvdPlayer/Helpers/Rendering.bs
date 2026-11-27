@@ -26,6 +26,7 @@ sub renderScreen(menu as object)
     syncHighlightSheet(menu)
     buttonsChanged = FormatJson(m.rendering.geometry) <> FormatJson(menu.buttons)
     if m.rendering.hotspots = invalid or buttonsChanged or geometryChanged then renderMenuButtons(menu)
+    if m.rendering.backgroundReady then revealMenuBackground()
 end sub
 
 '-------------------------------------------------------------------------------
@@ -47,6 +48,8 @@ sub replaceMenuBackground(menu as object, sources as object)
     end if
     m.rendering.sources = sources
     m.rendering.previewStarted = false
+    m.rendering.waitingForReveal = true
+    m.rendering.backgroundReady = false
     m.rendering.preview = invalid
     m.rendering.asset = { id: menu.assetId, image: sources.image, previewVideo: sources.video, previewLoop: sources.loop }
     m.rendering.root = m.nodes.host.createChild("Group")
@@ -62,6 +65,11 @@ sub replaceMenuBackground(menu as object, sources as object)
     image.observeField("loadStatus", "onImageStatus")
     m.nodes.status.text = ""
     image.uri = media.url
+    if m.rendering.retainedRoot <> invalid then
+        ' Keep the last ready still above the incoming Video until its first frames.
+        m.nodes.host.removeChild(m.rendering.retainedRoot)
+        m.nodes.host.appendChild(m.rendering.retainedRoot)
+    end if
 end sub
 
 '-------------------------------------------------------------------------------
@@ -143,6 +151,8 @@ sub clearMenu()
     m.rendering.image = invalid
     m.rendering.asset = invalid
     m.rendering.sources = invalid
+    m.rendering.waitingForReveal = false
+    m.rendering.backgroundReady = false
     m.rendering.previewStarted = false
     m.rendering.buttons = {}
     m.rendering.geometry = []
@@ -158,10 +168,6 @@ sub onImageStatus(event as object)
     if not event.getRoSGNode().isSameNode(m.rendering.image) then return
     if not m.nodes.host.visible then return
     if event.getData() = "ready" then
-        if m.rendering.retainedRoot <> invalid then
-            m.nodes.host.removeChild(m.rendering.retainedRoot)
-            m.rendering.retainedRoot = invalid
-        end if
         ' Start only after the replacement still can cover buffering/failure.
         if not m.rendering.previewStarted then
             m.rendering.previewStarted = true

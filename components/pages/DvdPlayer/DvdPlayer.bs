@@ -2,6 +2,7 @@ import "pkg:/components/pages/DvdPlayer/Helpers/Lifecycle.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/MenuNavigation.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/MenuPreview.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Presentation.bs"
+import "pkg:/components/pages/DvdPlayer/Helpers/StartupArtwork.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Resume.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/Filters.bs"
 import "pkg:/source/Number.bs"
@@ -32,13 +33,14 @@ sub init()
     m.loading = { active: false, generation: 0, task: invalid, failed: false }
     m.native = { task: invalid, requestId: "", revision: -1, state: "", snapshot: invalid, queue: [], inFlight: invalid, navigating: false }
     m.menu = { manifest: invalid, focused: 0 }
-    m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {}, rect: invalid }
-    m.playback = { active: false, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
+    m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, waitingForReveal: false, backgroundReady: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {}, rect: invalid }
+    m.playback = { active: false, startupClock: invalid, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
     m.resume = { requestId: "", mode: DvdSession.StartMode.Normal, prompting: false, closing: false }
-    m.highlights = { identity: "", descriptor: invalid, root: invalid, clip: invalid, poster: invalid, state: DvdHighlight.State.Selected }
+    m.highlights = { identity: "", descriptor: invalid, root: invalid, clip: invalid, poster: invalid, timer: invalid, waitExpired: false, state: DvdHighlight.State.Selected }
     m.transport = { title: "", year: "" }
-    m.presentation = { loading: false, filterHint: { shown: false, elapsed: invalid } }
+    m.presentation = { loading: false, spinnerRunning: false, filterHint: { shown: false, elapsed: invalid } }
     m.timeline = { diagnosticKey: "" }
+    m.startupArtwork = { host: m.top.findNode("startupArtwork"), mask: invalid, poster: invalid }
     initFilters()
     initHandlers()
     onLoadRequestChanged()
@@ -48,7 +50,7 @@ end sub
 ' initReferences
 '-------------------------------------------------------------------------------
 sub initReferences()
-    m.nodes = { host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), filterHint: m.top.findNode("filterHint"), filterHintTimer: m.top.findNode("filterHintTimer"), filterHintFade: m.top.findNode("filterHintFade"), controlsTimer: m.top.findNode("controlsHideTimer"), filterTimer: m.top.findNode("filterCapabilityTimer"), filterSpinner: m.top.findNode("filterChangeSpinner") }
+    m.nodes = { menuStartupCover: m.top.findNode("menuStartupCover"), host: m.top.findNode("menuHost"), status: m.top.findNode("status"), spinner: m.top.findNode("loading"), contentHost: m.top.findNode("contentHost"), controls: m.top.findNode("playbackControls"), filterHint: m.top.findNode("filterHint"), filterHintTimer: m.top.findNode("filterHintTimer"), filterHintFade: m.top.findNode("filterHintFade"), controlsTimer: m.top.findNode("controlsHideTimer"), filterTimer: m.top.findNode("filterCapabilityTimer"), filterSpinner: m.top.findNode("filterChangeSpinner") }
 end sub
 
 '-------------------------------------------------------------------------------
@@ -100,6 +102,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub beginLoad()
     releaseSessionResources()
+    beginStartupArtwork()
     m.loading.generation++
     m.loading.failed = false
     requestFilters(DvdFilter.Request.Catalog)
@@ -258,11 +261,9 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         if not keepMenu then stopPreview()
         if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
         if m.playback.timer <> invalid then m.playback.timer.control = TimerControl.Command.Stop
-        if keepMenu then
-            m.presentation.loading = false
-        else
-            m.presentation.loading = true
-        end if
+        ' Starting is unresolved navigation; preparingPlayback confirms a stream.
+        ' Retain the menu underneath, but acknowledge content preparation now.
+        m.presentation.loading = state = DvdSession.State.Preparing or not keepMenu
         if not m.filters.open then restorePlayerFocus()
     else if state = DvdSession.State.Menu then
         hideControls()
@@ -278,6 +279,7 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         m.native.navigating = false
         if not DvdPaths.SameId(m.playback.id, snapshot.playback.playbackId) then openContentVideo(snapshot.playback)
     else if state = DvdSession.State.Still then
+        clearStartupArtwork()
         m.native.navigating = false
         stopPreview()
         if m.playback.video <> invalid then m.playback.video.control = MediaControl.Command.Pause
@@ -286,6 +288,7 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         m.nodes.status.text = ""
         if not m.filters.open then restorePlayerFocus()
     else if state = DvdSession.State.Failed then
+        clearStartupArtwork()
         hideControls()
         stopPreview()
         releaseContentVideo()
@@ -394,6 +397,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
         return true
     end if
     if m.filters.busy then return true
+    if m.native.state = DvdSession.State.Menu and m.rendering.waitingForReveal then return true
     if key = Remote.Key.Options then
         if m.native.state <> DvdSession.State.Menu then requestDvdMenu()
         return true

@@ -1,0 +1,80 @@
+import "pkg:/source/MaskAssets.bs"
+import "pkg:/source/ResolutionAssets.bs"
+import "pkg:/source/ResolutionProfile.bs"
+
+'-------------------------------------------------------------------------------
+' beginStartupArtwork
+'-------------------------------------------------------------------------------
+sub beginStartupArtwork()
+    clearStartupArtwork()
+    artwork = m.session.demo.startupArtwork
+    if type(artwork) <> "roAssociativeArray" then return
+    path = Strings.ToString(artwork.path)
+    if not DvdPaths.IsMetadataPoster(path, artwork.metadataId) then return
+    try
+        artworkWidth = Number.ToInteger(artwork.size[0], 0)
+        artworkHeight = Number.ToInteger(artwork.size[1], 0)
+        if artworkWidth <= 0 or artworkHeight <= 0 then return
+        ' Match the card's physical-pixel request exactly, including HD rounding.
+        hdSize = [Number.ToInteger(artworkWidth * 0.6667), Number.ToInteger(artworkHeight * 0.6667)]
+        requestWidth = artworkWidth
+        if ResolutionProfile.IsHd() then requestWidth = hdSize[0]
+        separator = "?"
+        if Instr(1, path, "?") > 0 then separator = "&"
+        path += separator + "width=" + requestWidth.ToStr()
+        media = JellyfinAuth.BuildMediaRequest(m.session.server, path, m.session.token, m.session.userId)
+        if media.headers.Authorization = invalid then return
+        mask = m.startupArtwork.host.createChild("MaskGroup")
+        m.startupArtwork.mask = mask
+        ' Enlarge presentation only; keep the cached library image request unchanged.
+        mask.scale = [1.5, 1.5]
+        mask.translation = [(1920 - artworkWidth * 1.5) / 2, (1080 - artworkHeight * 1.5) / 2]
+        maskName = "poster-" + Number.ToInteger(artwork.columns, 5).ToStr() + "-col-mask.png"
+        MaskAssets.Apply(mask, maskName, [artworkWidth, artworkHeight], hdSize)
+        poster = mask.createChild("Poster")
+        m.startupArtwork.poster = poster
+        poster.width = artworkWidth
+        poster.height = artworkHeight
+        poster.opacity = 0.65
+        poster.loadDisplayMode = "scaleToFit"
+        agent = CreateObject("roHttpAgent")
+        agent.SetCertificatesFile("common:/certs/ca-bundle.crt")
+        agent.AddHeader("Authorization", media.headers.Authorization)
+        poster.setHttpAgent(agent)
+        poster.observeField("loadStatus", "onStartupPosterStatus")
+        poster.uri = media.url
+    catch error
+        ' Optional library artwork must not prevent DVD startup.
+        clearStartupArtwork()
+    end try
+end sub
+
+'-------------------------------------------------------------------------------
+' onStartupPosterStatus
+'-------------------------------------------------------------------------------
+sub onStartupPosterStatus(event as object)
+    poster = m.startupArtwork.poster
+    if not m.loading.active or poster = invalid then return
+    if not event.getRoSGNode().isSameNode(poster) then return
+    if event.getData() = "failed" then
+        clearStartupArtwork()
+        return
+    end if
+    if event.getData() <> "ready" then return
+    m.startupArtwork.host.visible = true
+end sub
+
+'-------------------------------------------------------------------------------
+' clearStartupArtwork
+'-------------------------------------------------------------------------------
+sub clearStartupArtwork()
+    poster = m.startupArtwork.poster
+    m.startupArtwork.poster = invalid
+    m.startupArtwork.host.visible = false
+    if poster <> invalid then
+        poster.unobserveField("loadStatus")
+        poster.uri = ""
+    end if
+    if m.startupArtwork.mask <> invalid then m.startupArtwork.host.removeChild(m.startupArtwork.mask)
+    m.startupArtwork.mask = invalid
+end sub

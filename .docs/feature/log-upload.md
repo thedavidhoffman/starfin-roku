@@ -103,3 +103,11 @@ SceneGraph focus/observer behavior, and a real-server upload require explicitly
 authorized verification; implementation alone does not establish they pass.
 
 API reference: [Jellyfin ClientLogController](https://github.com/jellyfin/jellyfin/blob/master/Jellyfin.Api/Controllers/ClientLogController.cs).
+
+### HTTP failure diagnostics
+
+Uploaded HTTP failure entries include the failure kind, HTTP/transport status,
+elapsed milliseconds, configured timeout, and a fixed safe explanation. URL
+credentials and supported authentication query values are masked. Raw response
+bodies and exception messages are excluded. This uses the existing error-log
+collector; request timeouts and response contracts are unchanged.

@@ -4,6 +4,7 @@ import "pkg:/source/Url.bs"
 import "pkg:/source/Json.bs"
 import "pkg:/source/Number.bs"
 import "pkg:/source/DateTime.bs"
+import "pkg:/source/Logger.bs"
 import "pkg:/components/pages/DvdPlayer/Helpers/FilterContracts.bs"
 import "pkg:/components/tasks/DvdPlayer/Helpers/Filters.bs"
 import "pkg:/components/tasks/DvdPlayer/Helpers/Scheduling.bs"
@@ -22,6 +23,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub executeRequest()
     request = m.top.request
+    m.log = new Logger("DvdSessionTask", m.global.logService)
     m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", pendingFilter: invalid, authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
     m.schedule = { clock: CreateObject("roTimespan"), statusAt: 0, retryId: "", retryAt: 0, stillRetryAt: 0, menuTimer: invalid }
     m.port = CreateObject("roMessagePort")
@@ -117,7 +119,17 @@ function sendCommand(command as object, notifyPage = true as boolean) as object
     if command.revision <> invalid then pairs.Push(Json.NumberPair("revision", command.revision))
     if command.button <> invalid then pairs.Push(Json.NumberPair("button", command.button))
     if command.positionSeconds <> invalid then pairs.Push(Json.NumberPair("positionSeconds", command.positionSeconds))
+    commandClock = invalid
+    if command.action = DvdSession.Action.Button then
+        commandClock = CreateObject("roTimespan")
+        m.log.write("Timing menu-command-send sessionId=" + m.native.request.requestId + " requestId=" + command.requestId + " button=" + Strings.ToString(command.button))
+    end if
     result = requestWithRetry(m.native.snapshot.commandPath, "POST", Json.Object(pairs))
+    if commandClock <> invalid then
+        responseState = ""
+        if type(result.data) = "roAssociativeArray" then responseState = Strings.ToString(result.data.state)
+        m.log.write("Timing menu-command-response sessionId=" + m.native.request.requestId + " requestId=" + command.requestId + " elapsedMs=" + commandClock.TotalMilliseconds().ToStr() + " status=" + Strings.ToString(result.status) + " state=" + responseState)
+    end if
     if m.top.cancelRequested then return result
     if result.ok then
         acceptSnapshot(result.data)
@@ -156,6 +168,8 @@ sub acceptSnapshot(data as dynamic)
     if revision < m.native.revision then return
     m.native.snapshot = data
     if revision = m.native.revision then
+        ' Measured timeline coverage advances without changing navigation revision.
+        if not m.top.cancelRequested then m.top.response = { action: DvdSession.Event.Snapshot, requestId: m.native.request.requestId, payload: data }
         reconcilePendingFilter()
         scheduleStatusPoll()
         return
@@ -171,12 +185,16 @@ sub acceptSnapshot(data as dynamic)
         if parts[4] <> "Sessions" or not DvdPaths.SameId(parts[5], data.sessionId) or parts[6] <> "Media" or not DvdPaths.SameId(parts[7], playback.playbackId) or parts[8] <> "index.m3u8" then throw "Invalid playback identity."
         if m.native.mediaId <> playback.playbackId then
             ' Do not hand Roku an unpublished playlist; 503 requests wait two seconds.
+            playlistClock = CreateObject("roTimespan")
+            m.log.write("Timing playlist-wait-start sessionId=" + m.native.request.requestId + " playbackId=" + playback.playbackId + " revision=" + revision.ToStr())
             result = requestWithRetry(path, "GET", invalid)
+            m.log.write("Timing playlist-wait-end sessionId=" + m.native.request.requestId + " playbackId=" + playback.playbackId + " elapsedMs=" + playlistClock.TotalMilliseconds().ToStr() + " status=" + Strings.ToString(result.status))
             if not result.ok then throw "DVD playlist could not be published."
             m.native.mediaId = playback.playbackId
         end if
     end if
     m.native.revision = revision
+    m.log.write("Timing snapshot-publish sessionId=" + m.native.request.requestId + " revision=" + revision.ToStr() + " state=" + data.state)
     if not m.top.cancelRequested then m.top.response = { action: DvdSession.Event.Snapshot, requestId: m.native.request.requestId, payload: data }
     reconcilePendingFilter()
     scheduleStatusPoll()

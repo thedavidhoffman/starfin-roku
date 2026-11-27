@@ -14,6 +14,7 @@ namespace HttpClient
         log = new Logger("HttpClient.Request", collector)
         transfer = invalid
         status = 0
+        requestClock = CreateObject("roTimespan")
 
         try
             if requestUrl = invalid or requestUrl = "" then
@@ -71,7 +72,7 @@ namespace HttpClient
 
             if requestStarted <> true then
                 message = "Unable to start the server request."
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, RequestFailure.Kind.RequestStartFailed, requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: 0, failureKind: RequestFailure.Kind.RequestStartFailed, errorMessage: message }
             end if
 
@@ -79,13 +80,13 @@ namespace HttpClient
             if msg = invalid then
                 transfer.AsyncCancel()
                 message = "The server request timed out."
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, RequestFailure.Kind.Timeout, requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: 0, failureKind: RequestFailure.Kind.Timeout, errorMessage: message }
             end if
 
             if type(msg) <> "roUrlEvent" then
                 message = "Unexpected server response."
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, 0, RequestFailure.Kind.UnexpectedResponse, requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: 0, failureKind: RequestFailure.Kind.UnexpectedResponse, errorMessage: message }
             end if
 
@@ -96,14 +97,14 @@ namespace HttpClient
 
             if status = 0 then
                 message = "Unable to reach the server."
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, RequestFailure.Kind.ConnectionFailed, requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: status, failureKind: RequestFailure.Kind.ConnectionFailed, errorMessage: message }
             end if
 
             hasAuthenticatedRequest = (token <> invalid and token <> "") or HttpClient.__AuthorizationHeaderHasToken(headers)
             if status = 401 and hasAuthenticatedRequest then
                 message = "Your session has expired. Please sign in again."
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, RequestFailure.Kind.AuthenticationRequired, requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: status, failureKind: RequestFailure.Kind.AuthenticationRequired, authExpired: true, errorMessage: message }
             end if
 
@@ -122,13 +123,13 @@ namespace HttpClient
                 else if msg.GetFailureReason() <> invalid and Strings.Trim(msg.GetFailureReason()) <> "" then
                     message = Strings.Trim(msg.GetFailureReason())
                 end if
-                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, message)
+                HttpClient.__LogFailure(log, normalizedMethod, logUrl, status, RequestFailure.FromStatus(status), requestClock.TotalMilliseconds(), timeoutMs)
                 return { ok: false, status: status, failureKind: RequestFailure.FromStatus(status), errorMessage: message, responseText: responseText }
             end if
 
             return { ok: true, status: status, data: data, responseText: responseText }
         catch error
-            log.error("Unexpected request error. Error=" + error.number.ToStr())
+            HttpClient.__LogFailure(log, method, requestUrl, status, RequestFailure.Kind.UnexpectedResponse, requestClock.TotalMilliseconds(), timeoutMs)
             if transfer <> invalid then
                 ' Cancellation must not replace the original request failure.
                 try
@@ -149,10 +150,15 @@ namespace HttpClient
     '---------------------------------------------------------------------------
     ' HttpClient.__LogFailure
     '---------------------------------------------------------------------------
-    sub __LogFailure(log as object, method as string, requestUrl as string, status as integer, message as string)
-        prefix = "HTTP request failed [" + method + "] " + requestUrl + " status=" + status.ToStr()
-        log.error(prefix)
-        log.writeConsoleOnly("ERROR: " + prefix + " message=" + message)
+    sub __LogFailure(log as object, method as string, requestUrl as string, status as integer, failureKind as string, elapsedMs as integer, timeoutMs as integer)
+        ' Use an allowlisted explanation, never server response text or exception details.
+        try
+            reason = RequestFailure.GetMessage(failureKind)
+            prefix = "HTTP request failed [" + method + "] " + HttpClient.__MaskUrl(requestUrl) + " status=" + status.ToStr()
+            log.error(prefix + " failureKind=" + failureKind + " elapsedMs=" + elapsedMs.ToStr() + " timeoutMs=" + timeoutMs.ToStr() + " reason=" + reason)
+        catch diagnosticError
+            ' Logging must not alter request handling.
+        end try
     end sub
 
     '---------------------------------------------------------------------------

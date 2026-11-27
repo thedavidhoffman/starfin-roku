@@ -1,0 +1,112 @@
+namespace tests
+
+    @SGNode("DvdSessionTask")
+    @suite("DVD session timeline refresh")
+    class DvdSessionTaskTests extends rooibos.BaseTestSuite
+
+        protected override function beforeEach()
+            sessionId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            discId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            sessionPath = "Starfin/Dvd/Discs/" + discId + "/Sessions/" + sessionId
+            m.node.native = { request: { requestId: sessionId, discId: discId }, path: sessionPath, revision: 7, pendingFilter: invalid, snapshot: invalid }
+            m.node.schedule = { menuTimer: invalid, statusAt: invalid, clock: { TotalMilliseconds: function()
+                return 1000
+            end function } }
+            m.top.cancelRequested = false
+            m.top.response = invalid
+        end function
+
+        function snapshot(coverageEnd = 6 as integer) as object
+            return {
+                schemaVersion: "starfin-dvd-session/1", sessionId: m.node.native.request.requestId, revision: 7, state: "playing"
+                statusPath: m.node.native.path, stopPath: m.node.native.path
+                commandPath: m.node.native.path + "/Commands", heartbeatPath: m.node.native.path + "/Heartbeat"
+                playback: { playbackId: "cccccccc-cccc-cccc-cccc-cccccccccccc", titleTimeline: { status: "available", mapping: { type: "piecewise", ranges: [
+                    { outputStartSeconds: 0, outputEndSeconds: coverageEnd, titleStartSeconds: 0, titleEndSeconds: coverageEnd }
+                ] } } }
+            }
+        end function
+
+        @describe("fresh coverage at the current navigation revision")
+
+        @it("forwards equal-revision coverage without consuming a pending command")
+        function _()
+            command = { requestId: "dddddddd-dddd-dddd-dddd-dddddddddddd", action: "progress" }
+            m.top.command = command
+            m.node.native.commandId = "previous-command"
+            fresh = m.snapshot(12)
+
+            'bs:disable-next-line 1140
+            acceptSnapshot(fresh)
+
+            m.assertEqual(m.top.response.action, "snapshot")
+            m.assertEqual(m.top.response.payload.playback.titleTimeline.mapping.ranges[0].outputEndSeconds, 12)
+            m.assertEqual(m.top.command.requestId, command.requestId)
+            m.assertEqual(m.node.native.commandId, "previous-command")
+            m.assertEqual(m.node.schedule.statusAt, 3000)
+        end function
+
+        @it("continues forwarding expanding coverage through twenty seconds")
+        function _()
+            for positionSeconds = 0 to 20 step 2
+                fresh = m.snapshot(positionSeconds + 6)
+
+                'bs:disable-next-line 1140
+                acceptSnapshot(fresh)
+
+                m.assertEqual(m.top.response.payload.revision, 7)
+                m.assertEqual(m.top.response.payload.playback.titleTimeline.mapping.ranges[0].outputEndSeconds, positionSeconds + 6)
+                m.assertEqual(m.node.schedule.statusAt, 3000)
+            end for
+        end function
+
+        @it("ignores older revisions without replacing current coverage")
+        function _()
+            m.node.native.snapshot = m.snapshot(12)
+            older = m.snapshot(6)
+            older.revision = 6
+
+            'bs:disable-next-line 1140
+            acceptSnapshot(older)
+
+            m.assertEqual(m.top.response, invalid)
+            m.assertEqual(m.node.native.snapshot.playback.titleTimeline.mapping.ranges[0].outputEndSeconds, 12)
+            m.assertEqual(m.node.schedule.statusAt, invalid)
+        end function
+
+        @it("does not publish after cancellation")
+        function _()
+            m.top.cancelRequested = true
+
+            'bs:disable-next-line 1140
+            acceptSnapshot(m.snapshot())
+
+            m.assertEqual(m.top.response, invalid)
+        end function
+
+        @it("refreshes awaiting-completion playback every two seconds")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.snapshot.state = "awaitingCompletion"
+
+            'bs:disable-next-line 1140
+            scheduleStatusPoll()
+
+            m.assertEqual(m.node.schedule.statusAt, 3000)
+        end function
+
+        @it("keeps input-only menus free of status polling")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.snapshot.state = "menu"
+            m.node.native.snapshot.menuContinuation = { menuInstance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", state: "waitingForInput" }
+
+            'bs:disable-next-line 1140
+            scheduleStatusPoll()
+
+            m.assertEqual(m.node.schedule.statusAt, invalid)
+        end function
+
+    end class
+
+end namespace

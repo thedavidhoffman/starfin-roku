@@ -184,6 +184,11 @@ the normal routing checks.
 ## Media flow
 
 The DVD library and native playback feature is isolated under `components/pages/DvdPlayer`.
+Its StartupArtwork helper owns the authenticated, rounded poster shown only during
+initial loading, reusing the library selection's poster request and scaling its
+card size and mask together by 1.5×,
+with stale-image guards and release
+when the first menu/content is ready or the session is cleaned up.
 `DvdLibraryPage` also owns in-memory title/release-date sorting and account/library
 browse preferences through the existing LibraryViewStateStore with DVD-prefixed
 keys. Its feature-local LibraryBrowse helper coordinates shared Browse By/Sort
@@ -250,10 +255,15 @@ retention and overlay replacement; MenuPreview owns HLS/MP4 playback, fallback,
 loop covering, cooldowns and preview event cleanup. DvdPlayer owns pending
 navigation visibility and command locks. Unchanged sources keep playing through
 menu/preparation updates; content playback clears menu media before presentation.
+Rendering owns the menu background reveal gate; MenuPreview releases it on usable
+video progress or fallback, while static menus release it when their image is ready.
+Presentation owns the startup cover/spinner and focus gating. Replacement menus
+retain the previous ready still until reveal; unchanged backgrounds bypass this wait.
 The renderer's feature-local HighlightSheet helper validates optional authored
 session-selected sprite descriptors against live raster bounds and button IDs,
 and owns authenticated sheet loading, crop/transform presentation, rectangle
-fallback and stale-load cleanup.
+fallback, a two-second maximum hidden-highlight wait, and stale-load/timer cleanup.
+The wait never cancels image loading; late artwork can replace the rectangle.
 DvdPlayer supplies command activation/acknowledgment state; live session buttons
 remain authoritative. The backend owns stream/palette/menu-context selection;
 the client never chooses manifest variants. Immutable sheet path/dimensions own
@@ -266,7 +276,9 @@ DvdPlaybackControls. Position updates never invoke control focus or filter refre
 session revisions and playback identity govern mapping lifetime. The controls
 render the standard-player timeline geometry without networking or seeking.
 Existing 15-second server progress reporting remains independent.
-DvdSessionTask's feature-local Scheduling helper owns status deadlines: 15 seconds
+DvdSessionTask forwards same-revision snapshots for advancing timeline coverage;
+the player's equal-revision path refreshes data without restarting media or controls.
+Its feature-local Scheduling helper owns status deadlines: two seconds
 for playback, one second for startup/menu evaluation, two seconds for unknown
 menus/stills or pending filters. Explicit waitingForInput menus disable status
 polling while retaining heartbeats; scheduled menus use a server-relative expiry

@@ -275,7 +275,7 @@ position. Back exits from authored submenus. During content playback, Back first
 
 ### Finite content and stills
 
-`starting`/`preparingPlayback` retains an already visible menu background while resolving menu navigation. When entered from content it keeps menu artwork hidden and retains the previous content Video node when available. Menu stills are used only for menu previews. Title/trailer startup and buffering keep the content surface visible, showing its retained frame or black with the loading indicator; they never reuse an earlier menu image. Starting a content unit clears the obsolete menu artwork.
+`starting`/`preparingPlayback` retains an already visible menu background while resolving menu navigation. A retained menu stays spinner-free during unresolved `starting`; authoritative `preparingPlayback` shows the loading spinner immediately over that background. Button-command responses are applied immediately by the existing task snapshot path. The backend waits up to 500 ms for navigation classification, not video readiness; slower navigation returns `starting` and normal polling supplies the eventual result. Ordinary menu outcomes do not trigger a playback spinner. When entered from content it keeps menu artwork hidden and retains the previous content Video node when available. Menu stills are used only for menu previews. Title/trailer startup and buffering keep the content surface visible, showing its retained frame or black with the loading indicator; they never reuse an earlier menu image. Starting a content unit clears the obsolete menu artwork.
 A new `playbackId` starts HLS exactly once after the worker confirms the original
 playlist is published. A 503 preflight waits two seconds before retrying. The
 finite player disables looping, seeking, and native trick-play controls. It starts
@@ -500,9 +500,15 @@ horizontal/vertical scaling. Alpha, aspect ratio and letterboxing are preserved.
 
 Sheet identity is its immutable asset path and pixel dimensions. Selection changes
 and mapping updates on the same sheet reuse the loaded Poster and update crops
-locally, without reassignment of its URI or restarting menu media. Until loading
-succeeds, or on image failure, rectangles remain visible. Sprite and rectangle
-highlights never display together; auto-action buttons stay unhighlighted.
+locally, without reassignment of its URI or restarting menu media. When matching
+artwork exists but is loading, both highlights stay hidden for up to two seconds.
+After that wait, the rectangle appears while loading continues; a late successful
+load replaces it with the original sprite. Rectangle mode, invalid/absent descriptors,
+missing matching sprites and image failures show the rectangle immediately. The wait
+belongs to the sheet load and does not restart on focus changes or reused snapshots.
+Navigation and OK remain responsive, and loading completion uses the current button
+and selected/activated state. Sprite and rectangle highlights never display together;
+auto-action buttons stay unhighlighted.
 An update with no buttons also reconciles highlight visibility, hiding any previous
 sprite even when the loaded sheet is reused.
 
@@ -512,7 +518,7 @@ if neither exists, the rectangle remains. Command acknowledgment or rejection
 reconciles the selected state with the current menu and focus.
 
 Changing sheets, leaving menu state, failure and cleanup release the overlay and
-its load observer. Only events from the current Poster in an active menu are
+its load observer and fallback timer. Only events from the current Poster in an active menu are
 accepted, preventing stale artwork from appearing after transitions. Returning to
 a menu loads its current session-selected sheet through the same fallback path.
 
@@ -651,7 +657,8 @@ pending. Runtime filter availability depends on the deployed backend contract.
 ## State-based session polling
 
 DvdSessionTask schedules status GETs separately from commands and heartbeats.
-Playing (including paused) and awaitingCompletion use a 15-second interval;
+Playing (including paused) and awaitingCompletion use a two-second interval to
+refresh measured timeline coverage before its initial roughly six-second window expires;
 starting/preparingPlayback and menu-continuation evaluation pending use one second.
 Menus explicitly waitingForInput disable periodic status GETs; commands still wake
 the task and their response snapshots refresh state. Heartbeats remain active.
@@ -803,3 +810,79 @@ scrolling and 1080p/720p layouts await device verification.
 The library-card chooser hides the beta notice and retains its original grid and
 status positions. Layout is reconciled when loading a library as well as rendering
 results, so entering or leaving a title grid does not retain the wrong notice spacing.
+
+Deferred highlight-wait checks: fast loads without rectangle flash; slow loads revealing fallback at two seconds and accepting late artwork; failure and missing-sprite fallback; navigation/OK during loading; unchanged-sheet updates; replacement and cleanup with stale image/timer events. Source/diff review only; no tests, builds or device checks.
+
+### Menu background reveal
+
+Initial DVD loading displays the selected disc's metadata poster behind the spinner
+when artwork is available. The library passes the selected group's poster path,
+metadata identity, card dimensions and column count with either single-disc or
+multi-disc selection. Startup uses the same authenticated URL, including its tag
+and physical-pixel width (with the card's HD rounding), so Roku can reuse cached
+artwork without requesting a larger version. The card's 309 × 464 poster and
+five-column rounded mask are scaled together by 1.5× to display at 463.5 × 696 design
+pixels, centered on screen with 192-pixel top and bottom margins
+and scale-to-fit behavior. 65% opacity over black keeps the spinner readable.
+Missing or failed artwork leaves the plain loading background. The StartupArtwork
+helper releases the poster when the first menu is revealed or content becomes
+playing/paused, and on still/error/cleanup. It never returns for later menu changes
+or playback buffering. Image callbacks from released posters are ignored.
+
+Deferred checks: enlarged poster sharpness and cache reuse, rounded corners at 1080p/720p,
+authenticated image failures, Back during loading, direct/resumed content startup,
+and absence of startup artwork during subsequent transitions.
+
+New menu backgrounds load behind a page-owned presentation gate. Static menus
+reveal when their still is ready. Video menus keep the spinner and an opaque
+startup cover until the preview reports playing plus forward position progress;
+the still remains decoded for fallback but is not flashed before the video.
+For a background replacement, the previous ready still stays above the incoming
+media until reveal instead of showing the replacement's temporary still.
+
+The current menu highlight and filter hint remain hidden until reveal. Menu input
+is blocked during this wait, with Back still available. Existing sheet readiness
+and its two-second fallback wait independently determine which highlight appears.
+Unchanged backgrounds reuse their reveal state and do not restart media or timers.
+Readiness received during a retained-menu preparation state is remembered. Returning
+to the same background releases the gate without requiring another image or video
+event; replacement backgrounds and cleanup discard that readiness.
+Preview failure or the existing startup timeout reveals the still immediately;
+HLS-to-MP4 fallback remains available. Subsequent buffering and finite MP4 loop
+coverage retain their existing still-image behavior. Content transitions and cleanup
+remove the gate, artwork, and observers; stale media events cannot reveal a newer menu.
+
+Deferred device checks: static and video startup, submenu replacement, same-source
+auto-actions, slow/failed HLS and MP4, preview cooldown, navigation/Back during loading,
+highlight timing, cleanup and late events. Source/diff review only; no builds,
+automated checks, test changes, or device checks performed.
+
+### Menu-to-content timing diagnostics
+
+`Timing` log entries identify menu selection, task command send/response, each newer
+snapshot published to the page, playlist wait start/end, Video creation/play request,
+first Roku playing state, and loading-spinner visibility transitions. Session IDs join task/page events; command request IDs
+join button requests and responses, and playback IDs join playlist and Video stages.
+Command and playlist elapsed milliseconds include transport retries and retry delays.
+Video elapsed milliseconds run from node setup to first playing; setupMs identifies
+the setup portion. These are client-observed intervals, not backend execution-time
+measurements or proof of the first displayed frame. Existing state logs show later
+buffering/errors. No new polling, credentials, response bodies, or media URLs are
+logged. Source/diff review only; capture and device verification remain deferred.
+
+### Fresh timeline coverage at unchanged revisions
+
+DvdSessionTask forwards accepted same-revision snapshots because measured timeline
+ranges advance independently of navigation revision. Older revisions remain ignored.
+The player's existing same-revision path replaces snapshot data and recomputes the
+informational timeline without recreating Video, resetting controls, or clearing
+pending commands. Title playback polls every two seconds; menu scheduling, 15-second
+progress reports and 30-second heartbeats are unchanged. Unknown ranges remain
+unavailable; data is never extrapolated or reused across playback identities.
+
+Added source-level test coverage for same-revision forwarding, expanding coverage
+through twenty seconds, older revisions, cancellation, polling cadence, unchanged
+Video/controls/pending commands, identity changes and genuine mapping gaps.
+Tests and builds have not been run. Deferred device acceptance: Revenge of the
+Cybermen on Synology, first twenty seconds and several minutes of playback, then
+stop/resume; confirm timeline stability and rejection of the previous stream's data.

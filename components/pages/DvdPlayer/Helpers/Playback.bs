@@ -9,6 +9,8 @@ sub openContentVideo(playback as object)
     media = JellyfinAuth.BuildMediaRequest(m.session.server, playback.playlistPath, m.session.token, m.session.userId)
     if media.headers.Authorization = invalid then throw "Missing DVD playback authentication."
     m.playback.id = playback.playbackId
+    m.playback.startupClock = CreateObject("roTimespan")
+    m.log.write("Timing video-open sessionId=" + m.native.requestId + " playbackId=" + m.playback.id)
     m.playback.active = true
     m.playback.started = false
     m.playback.completed = false
@@ -45,6 +47,7 @@ sub openContentVideo(playback as object)
     m.presentation.loading = true
     m.nodes.status.text = ""
     if not m.filters.open then restorePlayerFocus()
+    m.log.write("Timing video-play-request sessionId=" + m.native.requestId + " playbackId=" + m.playback.id + " setupMs=" + m.playback.startupClock.TotalMilliseconds().ToStr())
     video.control = MediaControl.Command.Play
 end sub
 
@@ -58,6 +61,7 @@ sub onContentState(event as object)
     state = event.getData()
     m.log.write("Native content state=" + Strings.ToString(state) + " playbackId=" + m.playback.id)
     if state = VideoPlayerState.Value.Playing or state = VideoPlayerState.Value.Paused then
+        clearStartupArtwork()
         m.playback.buffering = false
         m.playback.timer.control = TimerControl.Command.Stop
         m.presentation.loading = false
@@ -65,6 +69,7 @@ sub onContentState(event as object)
         m.nodes.contentHost.visible = true
         m.nodes.status.text = ""
         if state = VideoPlayerState.Value.Playing and not m.playback.started then
+            m.log.write("Timing video-first-playing sessionId=" + m.native.requestId + " playbackId=" + m.playback.id + " elapsedMs=" + m.playback.startupClock.TotalMilliseconds().ToStr())
             m.playback.started = true
             queueCommand(DvdSession.Action.Started, m.playback.id)
         end if
@@ -127,6 +132,7 @@ sub releaseContentVideo()
     m.playback.video = invalid
     m.playback.timer = invalid
     m.playback.active = false
+    m.playback.startupClock = invalid
     m.playback.id = ""
     syncTimeline()
     if video <> invalid then
