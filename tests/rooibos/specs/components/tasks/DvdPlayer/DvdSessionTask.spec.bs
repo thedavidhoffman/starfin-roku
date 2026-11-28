@@ -179,6 +179,49 @@ namespace tests
             m.assertEqual(m.node.schedule.statusAt, invalid)
         end function
 
+        @describe("menu presentation acknowledgments")
+
+        @it("polls an outstanding report even when the menu has no timer")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.snapshot.state = "menu"
+            m.node.native.snapshot.menuContinuation = { menuInstance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", state: "waitingForInput", selectionSequence: 1 }
+            m.node.schedule.menuReport = { instance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", sequence: 2 }
+
+            'bs:disable-next-line 1140
+            scheduleStatusPoll()
+
+            m.assertEqual(m.node.schedule.statusAt, 1500)
+        end function
+
+        @it("stops acknowledgment polling after the native sequence arrives")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.snapshot.state = "menu"
+            m.node.native.snapshot.menuContinuation = { menuInstance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", state: "waitingForInput", selectionSequence: 2 }
+            m.node.schedule.menuReport = { instance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", sequence: 2 }
+
+            'bs:disable-next-line 1140
+            scheduleStatusPoll()
+
+            m.assertInvalid(m.node.schedule.menuReport)
+            m.assertInvalid(m.node.schedule.statusAt)
+        end function
+
+        @it("retires an outstanding report when the menu instance changes")
+        function _()
+            m.node.native.snapshot = m.snapshot()
+            m.node.native.snapshot.state = "menu"
+            m.node.native.snapshot.menuContinuation = { menuInstance: "ffffffff-ffff-ffff-ffff-ffffffffffff", state: "awaitingPresentation", selectionSequence: 0 }
+            m.node.schedule.menuReport = { instance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", sequence: 2 }
+
+            'bs:disable-next-line 1140
+            scheduleStatusPoll()
+
+            m.assertInvalid(m.node.schedule.menuReport)
+            m.assertInvalid(m.node.schedule.statusAt)
+        end function
+
     end class
 
 end namespace

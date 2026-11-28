@@ -9,7 +9,7 @@ sub reconcileMenuSelection(snapshot as object, previousSnapshot as dynamic, rest
     end if
     if previousMenu = invalid then
         restoreSelection = true
-    else if previousMenu.selectedButton <> menu.selectedButton or FormatJson(previousMenu.buttons) <> FormatJson(menu.buttons) then
+    else if (previousMenu.selectedButton <> menu.selectedButton and m.menu.synchronization = invalid) or FormatJson(previousMenu.buttons) <> FormatJson(menu.buttons) then
         restoreSelection = true
     end if
     if previousMenu <> invalid then
@@ -67,7 +67,7 @@ end sub
 '-------------------------------------------------------------------------------
 sub activateMenuButton(buttonId as integer)
     if m.native.task = invalid or m.native.state <> DvdSession.State.Menu then return
-    if m.native.navigating or m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return
+    if m.native.navigating or menuCommandPending() then return
     if not m.rendering.buttons.DoesExist(buttonId.ToStr()) then return
     m.log.write("Timing menu-selection sessionId=" + m.native.requestId + " button=" + buttonId.ToStr() + " revision=" + m.native.revision.ToStr())
     m.native.navigating = true
@@ -92,9 +92,92 @@ sub navigateMenu(direction as string)
         if button.id = destination then
             focusButton(destination)
             ' Only a user directional selection triggers authored auto-action.
-            if button.autoAction = true then activateMenuButton(destination)
+            if button.autoAction = true then
+                activateMenuButton(destination)
+            else
+                reportMenuState()
+            end if
             return
         end if
     end for
 end sub
 
+'-------------------------------------------------------------------------------
+' synchronizeMenuInstance
+'-------------------------------------------------------------------------------
+sub synchronizeMenuInstance(snapshot as object)
+    if snapshot.capabilities = invalid or snapshot.menuContinuation = invalid then
+        m.menu.synchronization = invalid
+        return
+    end if
+    if snapshot.capabilities.menuSynchronization <> true then
+        m.menu.synchronization = invalid
+        return
+    end if
+    instance = snapshot.menuContinuation.menuInstance
+    if not DvdPaths.SameId(instance, instance) then return
+    if m.menu.synchronization <> invalid then
+        if DvdPaths.SameId(instance, m.menu.synchronization.instance) then return
+    end if
+    m.menu.synchronization = { instance: instance, sequence: 0, clock: invalid, ready: false, presentationAccepted: false }
+end sub
+
+'-------------------------------------------------------------------------------
+' acknowledgeMenuPresentation
+'-------------------------------------------------------------------------------
+sub acknowledgeMenuPresentation()
+    if m.menu.synchronization = invalid or m.native.state <> DvdSession.State.Menu then return
+    if m.rendering.waitingForReveal or not m.rendering.backgroundReady then return
+    if not m.menu.synchronization.ready or m.menu.synchronization.presentationAccepted then return
+    pendingReports = []
+    if m.native.inFlight <> invalid then pendingReports.Push(m.native.inFlight)
+    for each command in m.native.queue
+        pendingReports.Push(command)
+    end for
+    for each command in pendingReports
+        if command.action = DvdSession.Action.MenuState and command.positionSeconds <> invalid then
+            if DvdPaths.SameId(command.menuInstance, m.menu.synchronization.instance) then return
+        end if
+    end for
+    if m.menu.synchronization.clock = invalid then m.menu.synchronization.clock = CreateObject("roTimespan")
+    reportMenuState()
+end sub
+
+'-------------------------------------------------------------------------------
+' reportMenuState
+'-------------------------------------------------------------------------------
+sub reportMenuState()
+    sync = m.menu.synchronization
+    if sync = invalid or m.native.task = invalid or m.native.state <> DvdSession.State.Menu then return
+    if m.native.navigating or menuCommandPending() then return
+    selected = m.menu.focused
+    if not m.rendering.buttons.DoesExist(selected.ToStr()) then selected = Number.ToInteger(m.native.snapshot.menu.selectedButton, 0)
+    if not m.rendering.buttons.DoesExist(selected.ToStr()) then return
+    sync.sequence++
+    command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.MenuState, menuInstance: sync.instance, menuSequence: sync.sequence, button: selected }
+    if sync.clock <> invalid then
+        command.positionSeconds = sync.clock.TotalMilliseconds() / 1000.0
+        if command.positionSeconds > 3600 then command.positionSeconds = 3600
+    end if
+    ' Keep the in-flight report immutable for retries; coalesce only unsent focus.
+    pending = []
+    for each queued in m.native.queue
+        if queued.action <> DvdSession.Action.MenuState then pending.Push(queued)
+    end for
+    pending.Push(command)
+    m.native.queue = pending
+    dispatchCommand()
+end sub
+
+'-------------------------------------------------------------------------------
+' menuCommandPending
+'-------------------------------------------------------------------------------
+function menuCommandPending() as boolean
+    if m.native.inFlight <> invalid then
+        if m.native.inFlight.action <> DvdSession.Action.MenuState then return true
+    end if
+    for each command in m.native.queue
+        if command.action <> DvdSession.Action.MenuState then return true
+    end for
+    return false
+end function

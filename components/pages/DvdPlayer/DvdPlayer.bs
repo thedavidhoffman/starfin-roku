@@ -32,7 +32,7 @@ sub init()
     m.session = invalid
     m.loading = { active: false, generation: 0, task: invalid, failed: false }
     m.native = { task: invalid, requestId: "", revision: -1, state: "", snapshot: invalid, queue: [], inFlight: invalid, navigating: false }
-    m.menu = { manifest: invalid, focused: 0 }
+    m.menu = { manifest: invalid, focused: 0, synchronization: invalid }
     m.rendering = { root: invalid, retainedRoot: invalid, hotspots: invalid, sources: invalid, previewStarted: false, waitingForReveal: false, backgroundReady: false, image: invalid, video: invalid, timer: invalid, buttons: {}, geometry: [], asset: invalid, preview: invalid, previewHost: invalid, previewFailures: {}, rect: invalid }
     m.playback = { active: false, startupClock: invalid, video: invalid, timer: invalid, id: "", started: false, completed: false, pauseRequested: false, buffering: false, progress: 0 }
     m.resume = { requestId: "", mode: DvdSession.StartMode.Normal, prompting: false, closing: false }
@@ -192,16 +192,22 @@ sub onSessionResponse(event as object)
     else if response.action = DvdSession.Event.Command then
         if m.native.inFlight <> invalid then
             if response.commandId = m.native.inFlight.requestId then
-                m.highlights.state = DvdHighlight.State.Selected
+                if m.native.inFlight.action <> DvdSession.Action.MenuState then m.highlights.state = DvdHighlight.State.Selected
                 if response.ok and isMenuNavigationAction(m.native.inFlight.action) then
                     if DvdPaths.SameId(m.native.inFlight.interruptedPlaybackId, m.playback.id) then releaseContentVideo()
                     hideControls()
                 end if
                 if response.payload <> invalid then applySnapshot(response.payload, response.ok and (m.native.inFlight.action = DvdSession.Action.Button or isMenuNavigationAction(m.native.inFlight.action)))
+                if response.ok and m.native.inFlight.action = DvdSession.Action.MenuState and m.native.inFlight.positionSeconds <> invalid then
+                    if m.menu.synchronization <> invalid then
+                        if DvdPaths.SameId(m.native.inFlight.menuInstance, m.menu.synchronization.instance) then m.menu.synchronization.presentationAccepted = true
+                    end if
+                end if
                 if response.conflict then m.native.navigating = false
                 if m.native.inFlight.action = DvdSession.Action.Button and m.native.state = DvdSession.State.Menu then m.native.navigating = false
                 if m.native.inFlight.action = DvdSession.Action.SetFilter then handleFilterResult(response)
                 m.native.inFlight = invalid
+                acknowledgeMenuPresentation()
                 if m.native.state = DvdSession.State.Menu then renderMenuHighlight()
                 reconcileContentPause()
                 dispatchCommand()
@@ -279,8 +285,11 @@ sub applySnapshot(snapshot as object, restoreMenuSelection = false as boolean)
         releaseContentVideo()
         m.nodes.contentHost.visible = false
         m.nodes.host.visible = true
+        synchronizeMenuInstance(snapshot)
         renderScreen(snapshot.menu)
         reconcileMenuSelection(snapshot, previousSnapshot, restoreMenuSelection)
+        if m.menu.synchronization <> invalid then m.menu.synchronization.ready = true
+        acknowledgeMenuPresentation()
         m.presentation.loading = false
     else if state = DvdSession.State.Playing or state = DvdSession.State.AwaitingCompletion then
         clearMenu()
@@ -324,7 +333,10 @@ sub queueCommand(action as string, playbackId = invalid as dynamic, value = inva
         command.revision = m.native.revision
     end if
     if isMenuNavigationAction(action) then command.interruptedPlaybackId = m.playback.id
-    if action = DvdSession.Action.Button then command.button = value
+    if action = DvdSession.Action.Button then
+        command.button = value
+        if m.menu.synchronization <> invalid then command.menuInstance = m.menu.synchronization.instance
+    end if
     if action = DvdSession.Action.Progress then command.positionSeconds = value
     if action = DvdSession.Action.Pause or isMenuNavigationAction(action) then
         positionCommand = finalPositionCommand(action)
@@ -351,6 +363,12 @@ sub dispatchCommand()
         if command.playbackId <> invalid then
             valid = false
             if snapshot <> invalid and snapshot.playback <> invalid then valid = DvdPaths.SameId(command.playbackId, snapshot.playback.playbackId)
+        else if command.menuInstance <> invalid then
+            valid = false
+            if m.native.state = DvdSession.State.Menu and snapshot <> invalid then
+                if snapshot.menuContinuation <> invalid then valid = DvdPaths.SameId(command.menuInstance, snapshot.menuContinuation.menuInstance)
+            end if
+            if valid then command.revision = m.native.revision
         else
             valid = command.revision = m.native.revision
         end if
@@ -414,7 +432,7 @@ function onKeyEvent(key as string, press as boolean) as boolean
     end if
     if m.native.navigating then return true
     if m.native.state = DvdSession.State.Menu then
-        if m.native.inFlight <> invalid or m.native.queue.Count() > 0 then return true
+        if menuCommandPending() then return true
         if key = Remote.Key.Play or key = Remote.Key.PlayPause then
             openFilterPicker()
         else if key = Remote.Key.OK then

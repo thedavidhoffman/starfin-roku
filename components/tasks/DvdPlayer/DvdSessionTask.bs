@@ -25,7 +25,7 @@ sub executeRequest()
     request = m.top.request
     m.log = new Logger("DvdSessionTask", m.global.logService)
     m.native = { request: request, headers: JellyfinAuth.BuildTokenHeaders(request.token), path: "", started: false, snapshot: invalid, revision: -1, commandId: "", pendingFilter: invalid, authExpired: false, errorCode: "", mediaId: "", heartbeat: CreateObject("roTimespan") }
-    m.schedule = { clock: CreateObject("roTimespan"), statusAt: 0, retryId: "", retryAt: 0, stillRetryAt: 0, menuTimer: invalid }
+    m.schedule = { clock: CreateObject("roTimespan"), statusAt: 0, retryId: "", retryAt: 0, stillRetryAt: 0, menuTimer: invalid, menuReport: invalid }
     m.port = CreateObject("roMessagePort")
     m.top.observeField("cancelRequested", m.port)
     m.top.observeField("command", m.port)
@@ -124,6 +124,8 @@ function sendCommand(command as object, notifyPage = true as boolean) as object
     end if
     if command.revision <> invalid then pairs.Push(Json.NumberPair("revision", command.revision))
     if command.button <> invalid then pairs.Push(Json.NumberPair("button", command.button))
+    if command.menuInstance <> invalid then pairs.Push(Json.Pair("menuInstance", command.menuInstance))
+    if command.menuSequence <> invalid then pairs.Push(Json.NumberPair("menuSequence", command.menuSequence))
     if command.positionSeconds <> invalid then pairs.Push(Json.NumberPair("positionSeconds", command.positionSeconds))
     commandClock = invalid
     if command.action = DvdSession.Action.Button then
@@ -138,6 +140,7 @@ function sendCommand(command as object, notifyPage = true as boolean) as object
     end if
     if m.top.cancelRequested then return result
     if result.ok then
+        if command.action = DvdSession.Action.MenuState then m.schedule.menuReport = { instance: command.menuInstance, sequence: command.menuSequence }
         acceptSnapshot(result.data)
     else if result.status = 409 then
         status = requestWithRetry(m.native.snapshot.statusPath, "GET", invalid)

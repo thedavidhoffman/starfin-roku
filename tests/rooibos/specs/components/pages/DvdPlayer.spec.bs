@@ -8,7 +8,7 @@ namespace tests
             m.top.callFunc("deactivate")
             m.node.session = { server: "http://server/jellyfin", token: "test-token", userId: "user" }
             m.node.loading.active = true
-            m.node.menu = { manifest: { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }, focused: 0 }
+            m.node.menu = { manifest: { id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" }, focused: 0, synchronization: invalid }
             m.node.resume.closing = false
             m.node.resume.prompting = false
             m.node.loading.failed = false
@@ -354,7 +354,7 @@ namespace tests
 
         @describe("native menu navigation")
 
-        @it("moves normal focus locally without submitting a command")
+        @it("preserves local-only focus with a backend that lacks menu synchronization")
         function _()
             snapshot = m.pendingMenuSnapshot()
             snapshot.menu.buttons[0].right = 2
@@ -394,6 +394,183 @@ namespace tests
             m.assertEqual(task.command.button, 2)
             m.assertEqual(task.command.revision, 7)
             m.assertFalse(m.node.rendering.buttons["2"].getChild(0).visible)
+        end function
+
+        @describe("menu state synchronization")
+
+        function synchronizedMenu() as object
+            snapshot = m.pendingMenuSnapshot()
+            snapshot.capabilities = { menuSynchronization: true }
+            snapshot.menuContinuation = { menuInstance: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee", state: "awaitingPresentation", selectionSequence: 0 }
+            snapshot.menu.buttons[0].right = 2
+            snapshot.menu.buttons.Push({ id: 2, x: 220, y: 100, width: 100, height: 40, left: 1 })
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+            m.node.native.task = m.top.createChild("DvdSessionTask")
+            return snapshot
+        end function
+
+        @it("reports selection while keeping local navigation responsive")
+        function _()
+            snapshot = m.synchronizedMenu()
+
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            first = m.node.native.inFlight
+            'bs:disable-next-line 1140
+            navigateMenu("left")
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+
+            m.assertEqual(m.node.menu.focused, 2)
+            m.assertEqual(first.action, "menuState")
+            m.assertEqual(first.menuSequence, 1)
+            m.assertEqual(first.menuInstance, snapshot.menuContinuation.menuInstance)
+            m.assertEqual(m.node.native.queue.Count(), 1)
+            m.assertEqual(m.node.native.queue[0].menuSequence, 3)
+            m.assertFalse(m.node.native.navigating)
+        end function
+
+        @it("activates an auto-action button once without a separate focus report")
+        function _()
+            m.synchronizedMenu()
+            m.node.rendering.geometry[1].autoAction = true
+
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+
+            m.assertEqual(m.node.native.task.command.action, "button")
+            m.assertEqual(m.node.native.task.command.button, 2)
+            m.assertEqual(m.node.native.queue.Count(), 0)
+            m.assertEqual(m.node.menu.synchronization.sequence, 0)
+        end function
+
+        @it("waits for visible presentation before starting the menu clock")
+        function _()
+            m.synchronizedMenu()
+
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+
+            m.assertInvalid(m.node.menu.synchronization.clock)
+            m.assertInvalid(m.node.native.task.command)
+        end function
+
+        @it("acknowledges visible presentation only once")
+        function _()
+            m.synchronizedMenu()
+            m.node.rendering.backgroundReady = true
+            m.node.rendering.waitingForReveal = false
+
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+            first = m.node.native.task.command
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+
+            m.assertEqual(first.action, "menuState")
+            m.assertTrue(first.positionSeconds >= 0)
+            m.assertEqual(m.node.native.task.command.requestId, first.requestId)
+            m.assertEqual(m.node.native.queue.Count(), 0)
+        end function
+
+        @it("retries rejected presentation with refreshed selection and the original clock")
+        function _()
+            snapshot = m.synchronizedMenu()
+            m.node.rendering.backgroundReady = true
+            m.node.rendering.waitingForReveal = false
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+            first = m.node.native.inFlight
+            clock = { TotalMilliseconds: function()
+                return 1250
+            end function }
+            m.node.menu.synchronization.clock = clock
+            snapshot = ParseJson(FormatJson(snapshot), "d")
+            snapshot.revision = m.node.native.revision + 1
+            snapshot.menu.buttons.Shift()
+            snapshot.menu.selectedButton = 2
+            event = m.responseEvent(m.node.native.task, { requestId: m.node.native.requestId, action: "command", commandId: first.requestId, ok: false, conflict: true, payload: snapshot })
+
+            'bs:disable-next-line 1140
+            onSessionResponse(event)
+
+            retry = m.node.native.inFlight
+            m.assertEqual(retry.action, "menuState")
+            m.assertNotEqual(retry.requestId, first.requestId)
+            m.assertTrue(retry.menuSequence > first.menuSequence)
+            m.assertEqual(retry.button, 2)
+            m.assertEqual(retry.positionSeconds, 1.25)
+            m.assertFalse(m.node.menu.synchronization.presentationAccepted)
+            m.assertEqual(m.node.native.queue.Count(), 0)
+        end function
+
+        @it("does not resubmit an accepted presentation report")
+        function _()
+            snapshot = m.synchronizedMenu()
+            m.node.rendering.backgroundReady = true
+            m.node.rendering.waitingForReveal = false
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+            first = m.node.native.inFlight
+            event = m.responseEvent(m.node.native.task, { requestId: m.node.native.requestId, action: "command", commandId: first.requestId, ok: true, conflict: false, payload: snapshot })
+
+            'bs:disable-next-line 1140
+            onSessionResponse(event)
+            'bs:disable-next-line 1140
+            acknowledgeMenuPresentation()
+
+            m.assertTrue(m.node.menu.synchronization.presentationAccepted)
+            m.assertInvalid(m.node.native.inFlight)
+            m.assertEqual(m.node.native.queue.Count(), 0)
+        end function
+
+        @it("does not roll newer local focus back when an older selection is acknowledged")
+        function _()
+            snapshot = m.synchronizedMenu()
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            'bs:disable-next-line 1140
+            navigateMenu("left")
+            snapshot = ParseJson(FormatJson(snapshot))
+            snapshot.revision = 8
+            snapshot.menu.selectedButton = 2
+            snapshot.menuContinuation.selectionSequence = 1
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertEqual(m.node.menu.focused, 1)
+        end function
+
+        @it("queues OK behind a report without losing menu identity")
+        function _()
+            snapshot = m.synchronizedMenu()
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            'bs:disable-next-line 1140
+            activateMenuButton(2)
+
+            m.assertTrue(m.node.native.navigating)
+            m.assertEqual(m.node.native.queue.Count(), 1)
+            m.assertEqual(m.node.native.queue[0].action, "button")
+            m.assertEqual(m.node.native.queue[0].menuInstance, snapshot.menuContinuation.menuInstance)
+        end function
+
+        @it("restores native selection for a new menu with identical artwork")
+        function _()
+            snapshot = m.synchronizedMenu()
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            snapshot = ParseJson(FormatJson(snapshot))
+            snapshot.revision = 8
+            snapshot.menuContinuation = { menuInstance: "ffffffff-ffff-ffff-ffff-ffffffffffff", state: "waitingForInput", selectionSequence: 0 }
+
+            'bs:disable-next-line 1140
+            applySnapshot(snapshot)
+
+            m.assertEqual(m.node.menu.focused, 1)
+            m.assertEqual(m.node.menu.synchronization.instance, "ffffffff-ffff-ffff-ffff-ffffffffffff")
         end function
 
         @describe("measured DVD title progress")

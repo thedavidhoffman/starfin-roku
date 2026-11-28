@@ -925,3 +925,38 @@ with zero failures, crashes, or ignored tests. Test maintenance aligned HTTP moc
 signatures, DVD asset fixtures, settings expectations, and the MainScene harness
 with current production contracts. No separate UI automation or visual checks
 were performed.
+
+## Native menu selection and presentation clock
+
+When the backend advertises `capabilities.menuSynchronization`, DvdPlayer keeps
+local directional highlighting responsive and sends coalesced `menuState` reports
+through the existing session task. Each report carries the menu instance, a
+monotonic per-menu sequence, and selected button. In-flight requests remain
+immutable for retries. Directional auto-action still sends one button activation.
+Routine reports do not block arrows/OK or show the playback spinner. Activations
+carry the menu instance so harmless timer/selection revisions cannot discard OK.
+New menu instances restore native selection; late selection acknowledgments for
+the same menu cannot overwrite newer local focus.
+
+The first actual reveal starts a monotonic presentation clock. Animated previews
+use the existing forward-frame-progress reveal; static fallback uses its ready
+image reveal. A `menuState` report includes elapsed visible seconds, capped at one
+hour (authored continuations are bounded to ten minutes). Queued/in-flight presentation reports suppress duplicate submissions separately
+from HTTP acceptance. A rejected report is retried against the refreshed menu
+with a new sequence and request ID, preserving the original presentation clock;
+responses for another menu instance cannot mark the current presentation accepted.
+Repeated reports never restart the backend clock. This handles startup latency; later preview buffering
+does not pause that clock. Timed artwork/forced activation remain separate work.
+
+The backend publishes `awaitingPresentation` without a timer until acknowledgment,
+then publishes `scheduled`. Task scheduling polls an outstanding report until
+`menuContinuation.selectionSequence` acknowledges it or the menu changes, even
+when the command response precedes native processing. Missing acknowledgments
+hold the menu rather than assuming the user has seen it. Deploy both apps together
+for timed menus; old backends continue to use local-only focus.
+
+Regression coverage includes coalesced focus, presentation gating, duplicate
+reveal, late selection snapshots, queued activation, replacement menus, and task
+acknowledgment polling. Roku compilation, Rooibos/device checks, packaging and
+deployment are deferred until explicitly requested under the development-cycle
+verification gate.

@@ -4,6 +4,7 @@ import "pkg:/source/Number.bs"
 namespace DvdMenuContinuation
     enum State
         Pending = "pending"
+        AwaitingPresentation = "awaitingPresentation"
         WaitingForInput = "waitingForInput"
         Scheduled = "scheduled"
     end enum
@@ -15,7 +16,22 @@ end namespace
 sub scheduleStatusPoll()
     intervalMs = 2000
     snapshot = m.native.snapshot
-    if snapshot.state <> DvdSession.State.Menu then m.schedule.menuTimer = invalid
+    if snapshot.state <> DvdSession.State.Menu then
+        m.schedule.menuTimer = invalid
+        m.schedule.menuReport = invalid
+    end if
+    if m.schedule.menuReport <> invalid then
+        continuation = snapshot.menuContinuation
+        if type(continuation) = "roAssociativeArray" then
+            if not DvdPaths.SameId(continuation.menuInstance, m.schedule.menuReport.instance) or Number.ToInteger(continuation.selectionSequence, 0) >= m.schedule.menuReport.sequence then m.schedule.menuReport = invalid
+        end if
+        if m.schedule.menuReport <> invalid then
+            ' The HTTP response can precede native lookahead. Poll until that
+            ' menu sequence is acknowledged, even for otherwise idle menus.
+            m.schedule.statusAt = m.schedule.clock.TotalMilliseconds() + 500
+            return
+        end if
+    end if
     if m.native.pendingFilter <> invalid then
         intervalMs = 2000
     else if snapshot.state = DvdSession.State.Starting or snapshot.state = DvdSession.State.Preparing then
@@ -46,7 +62,7 @@ sub scheduleMenuStatus(snapshot as object)
         m.schedule.menuTimer = invalid
         return
     end if
-    if continuation.state = DvdMenuContinuation.State.WaitingForInput then
+    if continuation.state = DvdMenuContinuation.State.WaitingForInput or continuation.state = DvdMenuContinuation.State.AwaitingPresentation then
         m.schedule.menuTimer = invalid
         m.schedule.statusAt = invalid
         return
