@@ -431,6 +431,88 @@ namespace tests
             m.assertFalse(m.node.native.navigating)
         end function
 
+        @it("allows the filter picker during queued background menu reports")
+        function _()
+            m.synchronizedMenu()
+            m.node.rendering.waitingForReveal = false
+            m.node.filters.capability = "available"
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            'bs:disable-next-line 1140
+            navigateMenu("left")
+
+            'bs:disable-next-line 1140
+            openFilterPicker()
+
+            m.assertTrue(m.node.filters.open)
+            m.assertEqual(m.top.overlayRequested.componentName, "DvdFilterDialog")
+            m.assertEqual(m.node.native.inFlight.action, "menuState")
+            m.assertEqual(m.node.native.queue[0].action, "menuState")
+        end function
+
+        @it("blocks the filter picker behind actual menu navigation")
+        function _()
+            m.synchronizedMenu()
+            m.node.rendering.waitingForReveal = false
+            m.node.filters.capability = "available"
+            'bs:disable-next-line 1140
+            activateMenuButton(2)
+
+            'bs:disable-next-line 1140
+            openFilterPicker()
+
+            m.assertFalse(m.node.filters.open)
+        end function
+
+        function queueMenuFilter() as object
+            snapshot = m.synchronizedMenu()
+            m.node.rendering.waitingForReveal = false
+            m.node.filters.selectedId = "mono"
+            m.node.filters.noFilter = { id: "none", name: "None" }
+            m.node.filters.model = CreateObject("roSGNode", "DvdFilterModel")
+            m.node.filters.open = true
+            'bs:disable-next-line 1140
+            navigateMenu("right")
+            event = m.responseEvent(m.node.filters.model, "none")
+            'bs:disable-next-line 1140
+            onFilterSelected(event)
+            return snapshot
+        end function
+
+        @it("dispatches a queued menu filter across a selection revision")
+        function _()
+            snapshot = m.queueMenuFilter()
+            queued = m.node.native.queue[0]
+            m.assertEqual(queued.action, "setFilter")
+            m.assertEqual(queued.menuInstance, snapshot.menuContinuation.menuInstance)
+            m.node.native.revision = 8
+            m.node.native.inFlight = invalid
+
+            'bs:disable-next-line 1140
+            dispatchCommand()
+
+            m.assertEqual(m.node.native.task.command.requestId, queued.requestId)
+            m.assertEqual(m.node.native.task.command.revision, 8)
+            m.assertEqual(m.node.native.task.command.filterId, "none")
+        end function
+
+        @it("rejects a queued filter when its menu was replaced")
+        function _()
+            m.queueMenuFilter()
+            snapshot = ParseJson(FormatJson(m.node.native.snapshot))
+            snapshot.menuContinuation.menuInstance = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+            m.node.native.snapshot = snapshot
+            m.node.native.inFlight = invalid
+
+            'bs:disable-next-line 1140
+            dispatchCommand()
+
+            m.assertInvalid(m.node.native.inFlight)
+            m.assertEqual(m.node.native.queue.Count(), 0)
+            m.assertFalse(m.node.filters.busy)
+            m.assertEqual(m.node.filters.waitingId, "")
+        end function
+
         @it("activates an auto-action button once without a separate focus report")
         function _()
             m.synchronizedMenu()

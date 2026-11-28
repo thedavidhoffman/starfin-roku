@@ -15,12 +15,16 @@ end sub
 '-------------------------------------------------------------------------------
 function canChooseFilter() as boolean
     if m.native.task = invalid or m.loading.failed or m.resume.closing or m.filters.busy then return false
-    if m.filters.waitingId <> "" or m.native.queue.Count() > 0 or m.native.navigating then return false
+    if m.filters.waitingId <> "" or m.native.navigating then return false
+    ' Menu synchronization is background work, just like playback progress.
+    ' Use the same admission policy as arrows/OK and retain menu identity when
+    ' the resulting filter command queues behind a selection acknowledgment.
+    if m.native.state = DvdSession.State.Menu then return not m.rendering.waitingForReveal and not menuCommandPending()
+    if m.native.queue.Count() > 0 then return false
     ' Progress is background bookkeeping; a filter intent can queue behind it.
     if m.native.inFlight <> invalid then
         if m.native.inFlight.action <> DvdSession.Action.Progress then return false
     end if
-    if m.native.state = DvdSession.State.Menu then return not m.rendering.waitingForReveal
     if m.native.state <> DvdSession.State.Playing and m.native.state <> DvdSession.State.AwaitingCompletion then return false
     if m.native.snapshot = invalid or m.native.snapshot.playback = invalid then return false
     if not DvdPaths.SameId(m.native.snapshot.playback.playbackId, m.playback.id) then return false
@@ -245,6 +249,7 @@ sub onFilterSelected(event as object)
     command = { requestId: CreateObject("roDeviceInfo").GetRandomUUID(), action: DvdSession.Action.SetFilter, filterId: filterId }
     if m.native.state = DvdSession.State.Menu then
         command.revision = m.native.revision
+        if m.menu.synchronization <> invalid then command.menuInstance = m.menu.synchronization.instance
     else
         command.playbackId = m.playback.id
     end if

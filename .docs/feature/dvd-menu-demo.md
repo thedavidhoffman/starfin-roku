@@ -779,7 +779,7 @@ otherwise hide them. The toolbar recovers focus to Play/Pause if its filter entr
 is hidden. The pill retains measured sizing for its longer label.
 
 The menu-origin picker explains: ?Applies when video plays. DVD menus are unaffected.?
-Its command contains revision/filterId but no playback ID or position. Content
+Its command contains revision/filterId and the current menuInstance when synchronization is supported, but no playback ID or position. Content
 selection still captures the current playback identity/position at dispatch.
 Both paths share request correlation, pending acknowledgment, rejection handling,
 and the cancellable blocking spinner. A menu selection finishes on acknowledgment
@@ -960,3 +960,10 @@ reveal, late selection snapshots, queued activation, replacement menus, and task
 acknowledgment polling. Roku compilation, Rooibos/device checks, packaging and
 deployment are deferred until explicitly requested under the development-cycle
 verification gate.
+
+Menu filter admission treats queued/in-flight `menuState` reports as background
+work. The picker remains usable while these reports settle, but navigation and
+other filter commands still block it. A menu filter choice retains `menuInstance`
+through the command task and HTTP request: selection/timing revisions do not
+invalidate it, while replacement menus do. Regression cases cover picker access,
+navigation exclusion, revision changes, and menu replacement.
